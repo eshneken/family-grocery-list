@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { inferCategory, normalizeRequest, parseQuantity } from "./parser";
+import { groceryRequestFixtures } from "@/test/fixtures/grocery-requests";
 
 const catalog = [
   {
@@ -54,5 +55,15 @@ describe("parser", () => {
     expect(inferCategory("paper towels")).toBe("Household");
     expect(inferCategory("cherry tomatoes")).toBe("Produce");
     expect(inferCategory("pastrami")).toBe("Meat/Deli");
+  });
+
+  it("parses real grocery fixtures consistently", () => {
+    groceryRequestFixtures.forEach((fixture) => {
+      expect(parseQuantity(fixture.raw)).toEqual({
+        quantityText: fixture.quantityText,
+        itemText: fixture.itemText
+      });
+      expect(inferCategory(fixture.itemText)).toBe(fixture.category);
+    });
   });
 });
