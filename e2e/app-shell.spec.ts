@@ -41,6 +41,7 @@ test("requestor adds an item and updates its category and recurring flag", async
   await row.getByLabel(/Move cherry tomatoes to category/).selectOption("Produce");
   await row.getByLabel("Recurring").check();
   await row.getByRole("button", { name: "Save" }).click();
+  await page.waitForLoadState("networkidle");
 
   await expect(row.getByLabel("Recurring")).toBeChecked();
 });
