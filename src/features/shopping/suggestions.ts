@@ -14,7 +14,11 @@ async function currentListKeys(currentListId?: string) {
     where: { shoppingListId: currentListId },
     select: { groceryItemId: true, displayName: true }
   });
-  return new Set(currentItems.map((item) => item.groceryItemId ?? item.displayName.toLowerCase()));
+  return new Set(
+    currentItems.flatMap((item) =>
+      item.groceryItemId ? [item.groceryItemId, item.displayName.toLowerCase()] : [item.displayName.toLowerCase()]
+    )
+  );
 }
 
 export async function getCommonSuggestions(householdId: string, currentListId?: string): Promise<GrocerySuggestion[]> {
@@ -42,7 +46,7 @@ export async function getCommonSuggestions(householdId: string, currentListId?: 
     const weight = 10 - tripIndex;
     trip.shoppingList.items.forEach((item) => {
       const key = item.groceryItemId ?? item.displayName.toLowerCase();
-      if (alreadyOnList.has(key)) return;
+      if (alreadyOnList.has(key) || alreadyOnList.has(item.displayName.toLowerCase())) return;
       const current = scores.get(key) ?? {
         displayName: item.displayName,
         category: item.category,

@@ -75,6 +75,31 @@ export async function addCatalogItem(input: {
 }
 
 export async function cleanupTestHousehold(testHousehold: TestHousehold) {
-  await prisma.household.delete({ where: { id: testHousehold.household.id } }).catch(() => undefined);
+  const householdId = testHousehold.household.id;
+  const memberships = await prisma.membership.findMany({
+    where: { householdId },
+    select: { id: true }
+  });
+  const membershipIds = memberships.map((membership) => membership.id);
+  const lists = await prisma.shoppingList.findMany({
+    where: { householdId },
+    select: { id: true }
+  });
+  const listIds = lists.map((list) => list.id);
+  const listItems = await prisma.listItem.findMany({
+    where: { shoppingListId: { in: listIds } },
+    select: { id: true }
+  });
+  const listItemIds = listItems.map((item) => item.id);
+
+  await prisma.itemOutcome.deleteMany({
+    where: { OR: [{ listItemId: { in: listItemIds } }, { actorId: { in: membershipIds } }] }
+  });
+  await prisma.correction.deleteMany({
+    where: { OR: [{ householdId }, { createdById: { in: membershipIds } }] }
+  });
+  await prisma.shoppingTrip.deleteMany({ where: { householdId } });
+  await prisma.listItem.deleteMany({ where: { shoppingListId: { in: listIds } } });
+  await prisma.household.delete({ where: { id: householdId } }).catch(() => undefined);
   await prisma.user.deleteMany({ where: { email: { in: testHousehold.emails } } });
 }
