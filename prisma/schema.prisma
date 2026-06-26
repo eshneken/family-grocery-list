@@ -1,0 +1,232 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  mock
+  google
+}
+
+enum Capability {
+  request
+  shop
+  administer
+}
+
+enum MemberStatus {
+  pending
+  active
+  disabled
+}
+
+enum ShoppingListStatus {
+  collecting
+  locked
+  completed
+}
+
+enum ListItemStatus {
+  pending
+  purchased
+  substituted
+  rejected
+  carried_forward
+}
+
+enum ShoppingTripStatus {
+  active
+  completed
+}
+
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  memberships  Membership[]
+  stores       Store[]
+  groceryItems GroceryItem[]
+  lists        ShoppingList[]
+  trips        ShoppingTrip[]
+  corrections  Correction[]
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  firstName    String
+  lastName     String
+  displayName  String?
+  imageUrl     String?
+  authProvider AuthProvider @default(mock)
+  createdAt    DateTime     @default(now())
+
+  memberships Membership[]
+}
+
+model Membership {
+  id               String        @id @default(cuid())
+  householdId      String
+  userId           String?
+  approvedEmail    String
+  status           MemberStatus  @default(pending)
+  capabilities     Capability[]
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  requestedItems ListItem[]     @relation("RequestedItems")
+  activeTrips    ShoppingTrip[] @relation("ActiveShopper")
+  outcomes       ItemOutcome[]  @relation("OutcomeActor")
+  corrections    Correction[]   @relation("CorrectionCreator")
+
+  @@unique([householdId, approvedEmail])
+  @@index([householdId, status])
+}
+
+model Store {
+  id                String   @id @default(cuid())
+  householdId       String
+  name              String
+  enabled           Boolean  @default(true)
+  categoryOrderJson Json?
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  groceryItems GroceryItem[]
+  listItems    ListItem[]
+  trips        ShoppingTrip[]
+  corrections  Correction[]
+
+  @@unique([householdId, name])
+  @@index([householdId, enabled])
+}
+
+model GroceryItem {
+  id              String   @id @default(cuid())
+  householdId     String
+  canonicalName   String
+  category        String
+  defaultStoreId  String?
+  anyStore        Boolean  @default(true)
+  recurringStaple Boolean  @default(false)
+  notes           String?
+
+  household    Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  defaultStore Store?         @relation(fields: [defaultStoreId], references: [id], onDelete: SetNull)
+  aliases      GroceryAlias[]
+  listItems    ListItem[]
+  corrections  Correction[]
+
+  @@unique([householdId, canonicalName])
+  @@index([householdId, category])
+}
+
+model GroceryAlias {
+  id            String @id @default(cuid())
+  groceryItemId String
+  alias         String
+
+  groceryItem GroceryItem @relation(fields: [groceryItemId], references: [id], onDelete: Cascade)
+
+  @@unique([groceryItemId, alias])
+}
+
+model ShoppingList {
+  id          String             @id @default(cuid())
+  householdId String
+  status      ShoppingListStatus @default(collecting)
+  createdAt   DateTime           @default(now())
+  lockedAt    DateTime?
+  completedAt DateTime?
+
+  household Household      @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  items     ListItem[]
+  trip      ShoppingTrip?
+
+  @@index([householdId, status])
+  @@index([householdId, createdAt])
+}
+
+model ListItem {
+  id             String         @id @default(cuid())
+  shoppingListId String
+  groceryItemId  String?
+  rawText        String
+  displayName    String
+  quantityText   String?
+  category       String
+  storeId        String?
+  requestedById  String
+  status         ListItemStatus @default(pending)
+  notes          String?
+  substituteText String?
+  createdAt      DateTime       @default(now())
+  outcomeAt      DateTime?
+
+  shoppingList ShoppingList @relation(fields: [shoppingListId], references: [id], onDelete: Cascade)
+  groceryItem  GroceryItem? @relation(fields: [groceryItemId], references: [id], onDelete: SetNull)
+  store        Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+  requestedBy  Membership   @relation("RequestedItems", fields: [requestedById], references: [id], onDelete: Restrict)
+  outcomes     ItemOutcome[]
+
+  @@index([shoppingListId, status])
+  @@index([shoppingListId, storeId])
+  @@index([requestedById])
+}
+
+model ShoppingTrip {
+  id              String             @id @default(cuid())
+  householdId      String
+  shoppingListId   String             @unique
+  activeShopperId  String
+  storeId          String?
+  status           ShoppingTripStatus @default(active)
+  startedAt        DateTime           @default(now())
+  completedAt      DateTime?
+
+  household     Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  shoppingList  ShoppingList @relation(fields: [shoppingListId], references: [id], onDelete: Restrict)
+  activeShopper Membership   @relation("ActiveShopper", fields: [activeShopperId], references: [id], onDelete: Restrict)
+  store         Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
+
+  @@index([householdId, status])
+}
+
+model ItemOutcome {
+  id         String         @id @default(cuid())
+  listItemId String
+  outcome    ListItemStatus
+  actorId    String
+  note       String?
+  createdAt  DateTime       @default(now())
+
+  listItem ListItem   @relation(fields: [listItemId], references: [id], onDelete: Cascade)
+  actor    Membership @relation("OutcomeActor", fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([listItemId])
+}
+
+model Correction {
+  id                String   @id @default(cuid())
+  householdId       String
+  inputText         String
+  correctedItemId   String
+  correctedCategory String
+  correctedStoreId  String?
+  createdById       String
+  createdAt         DateTime @default(now())
+
+  household       Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  correctedItem   GroceryItem @relation(fields: [correctedItemId], references: [id], onDelete: Cascade)
+  correctedStore  Store?      @relation(fields: [correctedStoreId], references: [id], onDelete: SetNull)
+  createdBy       Membership  @relation("CorrectionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  @@index([householdId, inputText])
+}
