@@ -102,6 +102,8 @@ http://localhost:3000
 
 The dev server is configured to bind to `0.0.0.0`, so mock mode can also be tested from another device on your network. Real Google login over plain HTTP should use `http://localhost:3000`; Google's localhost exception does not apply to arbitrary LAN addresses.
 
+To sign in with a real Google account locally, complete [Local Google Authentication Setup](#local-google-authentication-setup) after this initial setup.
+
 ## Seeded Local Data
 
 The seed script creates a `Smith Family` household with these mock users:
@@ -139,23 +141,75 @@ Mock mode is rejected when `APP_ENV=production`. It is never a production fallba
 
 ## Google Authentication
 
-Running without `--mock-auth` selects Google by default. Local Google development does not require TLS. Create a Google Web OAuth client with this authorized redirect URI:
+Running without `--mock-auth` selects Google by default. The Google account proves a person's identity, but the app authorizes that identity only when its Gmail address is an active household membership. Google sign-in alone does not grant access.
+
+### Local Google Authentication Setup
+
+You can develop and test Google sign-in on `localhost` without TLS or a certificate. Use `http://localhost:3000` exactly. Do not substitute `127.0.0.1`, a LAN IP address, or a trailing slash: Google compares the redirect URL exactly.
+
+1. Complete [Local Setup](#local-setup) first. It creates the local database and starts the PostgreSQL container.
+
+2. Add the Gmail address you will use with Google to the local household allowlist. Start the app in mock mode:
+
+```bash
+npm run dev -- --mock-auth
+```
+
+Open `http://localhost:3000`, use the mock user switcher to select an administrator such as `gina@example.com`, then open **Admin** and add your real Gmail address as an active member. Give it the capabilities you want to exercise (normally Request, Shop, and Admin for the first local account). Stop the server when finished.
+
+3. In the [Google Cloud console](https://console.cloud.google.com/), create a separate project for local development if you do not already have one. In **Google Auth Platform**, set up the OAuth consent screen:
+
+   - Choose an external audience for personal Gmail accounts.
+   - Leave the app in **Testing**. You do not need to publish it for local development.
+   - On the Audience page, add the Gmail address from step 2 as a test user. Add any second Gmail address you want to use for a denial test as a test user too.
+
+4. Create the OAuth client. In **Google Auth Platform** > **Clients**, create a client with application type **Web application**. Under **Authorized redirect URIs**, add exactly:
 
 ```text
 http://localhost:3000/api/auth/callback/google
 ```
 
-Configure `.env`:
+Copy the displayed client ID and client secret. Keep the secret private; do not commit it or paste it into chat.
+
+5. Configure `.env`. If it does not yet exist, create it from the safe template with `cp .env.example .env`. Fill in the values you copied and generate a session secret:
+
+```bash
+openssl rand -base64 32
+```
+
+Then set the result as `NEXTAUTH_SECRET`:
 
 ```bash
 APP_ENV="development"
-GOOGLE_CLIENT_ID="..."
-GOOGLE_CLIENT_SECRET="..."
-NEXTAUTH_SECRET="...at least 32 random bytes..."
+GOOGLE_CLIENT_ID="your-client-id.apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="your-client-secret"
+NEXTAUTH_SECRET="the-random-value-from-openssl"
 NEXTAUTH_URL="http://localhost:3000"
 ```
 
-Then run `npm run dev` and open `http://localhost:3000`. Google must return a verified email that exactly matches an active `Membership.approvedEmail`; case and surrounding whitespace normalize, but Gmail dots and `+suffix` aliases remain distinct.
+6. Start the app without the mock flag:
+
+```bash
+npm run dev
+```
+
+The launcher reads `.env` before checking the required Google settings. Open `http://localhost:3000`, select **Sign in with Google**, and choose the Gmail account added in step 2. A successful login opens the grocery list.
+
+7. Test the authorization boundary. Sign out, then sign in with the second Google test user from step 3 that you did **not** add through the app's Admin page. Google may authenticate that account, but the app must show an access-denied result and must not grant a session.
+
+Google must return a verified email that exactly matches an active `Membership.approvedEmail`; case and surrounding whitespace normalize, but Gmail dots and `+suffix` aliases remain distinct.
+
+### Local Google Troubleshooting
+
+| Symptom | What to check |
+| --- | --- |
+| `Google authentication requires: ...` when running `npm run dev` | Confirm the values are in `.env` at the repository root, not a differently named file. Stop and restart the server after changing `.env`. |
+| Google says `redirect_uri_mismatch` | The Google client must contain exactly `http://localhost:3000/api/auth/callback/google`, including `localhost`, port `3000`, path, and no trailing slash. |
+| Google blocks the account because the app is in testing | Add that Gmail address under the consent screen's **Audience** test users, then try again. |
+| Google sign-in completes but the app denies access | In mock mode, add that exact Gmail address as an active local member. Gmail dot and `+suffix` variants are different app identities. |
+| The wrong Google account is selected | Choose **Use another account** in Google’s account chooser, or use a private/incognito browser window. |
+
+For local HTTP, the session cookie is still `HttpOnly` and `SameSite=Lax`, but it is not marked `Secure`; that is expected because `Secure` cookies require HTTPS. Production uses HTTPS and therefore secure cookies.
 
 ## Running The App
 
