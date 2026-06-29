@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { cleanupTestHousehold, createTestHousehold } from "@/test/factories/db";
 import { addStore, approveMember, configureStores, disableMember, ensureSeedHousehold, setMemberStatus, updateMember } from "./household.service";
-import { normalizeEmail } from "./household.service";
+import { normalizeEmail } from "@/features/auth/email";
 
 describe("household service helpers", () => {
   it("normalizes approved emails before membership lookup", () => {

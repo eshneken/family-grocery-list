@@ -238,9 +238,9 @@ All provider versions must be constrained and `.terraform.lock.hcl` files commit
 
 Store these in the protected public-repository GitHub `production` environment:
 
-- `AUTH_GOOGLE_ID`
-- `AUTH_GOOGLE_SECRET`
-- `AUTH_SECRET`
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+- `NEXTAUTH_SECRET`
 
 The deploy job creates or updates a namespace-scoped Kubernetes Secret without writing values to logs. The deployment identity receives Secret write access only inside the `grocery` namespace.
 
@@ -252,6 +252,7 @@ Store endpoint, namespace, and cluster CA values as GitHub repository or environ
 - `OKE_CA_CERT_B64`
 - `OKE_OIDC_AUDIENCE`
 - `APP_HOSTNAME`
+- `NEXTAUTH_URL` (`https://grocery.shnekendorf.com`)
 
 The PostgreSQL service CA is placed in a ConfigMap and mounted read-only into migration and application containers. Prisma uses the mounted path in the connection parameters.
 
@@ -429,6 +430,8 @@ Required behavior:
 - Session cookies are `Secure`, `HttpOnly`, and use an appropriate `SameSite` policy.
 - Unapproved accounts receive a clear denial and no user row is created.
 - The mock user switcher and `mock_current_user` cookie path are disabled in production.
+- The application starts with `APP_ENV=production` and no `--mock-auth` argument; Google is the default auth mode.
+- After migrations and before the first rollout, run `npm run db:bootstrap -- --admin-email <approved-gmail> --household-name <name>`. Identical reruns are safe; conflicts fail closed.
 
 ## 14. pgAdmin and Administrative Access
 
@@ -501,7 +504,7 @@ The implementation is not complete until each live acceptance test has a recorde
 
 ## 18. Initial Deployment Sequence
 
-1. Implement Google OAuth and health endpoints locally; run the full local test suite.
+1. Implement Google OAuth and health endpoints locally; run the full local test suite, Google auth-shell E2E, and production mock-auth rejection check.
 2. Create the Google OAuth production client and callback URL.
 3. Complete the documented OCI WIF manual bootstrap.
 4. Run the Terraform bootstrap root locally and migrate its state to Object Storage.
@@ -510,9 +513,10 @@ The implementation is not complete until each live acceptance test has a recorde
 7. Review and approve the production OCI apply.
 8. Review and approve the cluster-foundation apply.
 9. Confirm node, PVC, load balancer, DNS, Caddy certificate, PostgreSQL, backup policy, and Bastion.
-10. Merge or dispatch the first application deployment.
-11. Confirm the migration Job, app rollout, Google login, allowlist denial, HTTPS, and pgAdmin access.
-12. Record outputs and recovery commands in the operations runbook.
+10. Run the idempotent first-administrator bootstrap after the migration Job.
+11. Merge or dispatch the first application deployment.
+12. Confirm the app rollout, Google login, allowlist denial, HTTPS, and pgAdmin access.
+13. Record outputs and recovery commands in the operations runbook.
 
 ## 19. Implementation Workstreams
 

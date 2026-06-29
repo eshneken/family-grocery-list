@@ -1,10 +1,12 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { ClipboardList, History, ListPlus, Settings, ShoppingCart } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { mockUsers } from "@/features/auth/mock-auth";
 import { requireMembership } from "@/features/auth/authorization";
+import { isExpectedAuthError } from "@/features/auth/errors";
+import { isMockAuthEnabled } from "@/features/auth/mode";
 import { ensureSeedHousehold } from "@/features/household/household.service";
+import { GoogleUserControls } from "./auth-controls";
 import { MockUserSwitcher } from "./mock-user-switcher";
 
 const navItems = [
@@ -15,16 +17,22 @@ const navItems = [
 ] as const;
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
-  await ensureSeedHousehold();
-  const cookieStore = await cookies();
+  const mockMode = isMockAuthEnabled();
+  if (mockMode) await ensureSeedHousehold();
 
   let membership;
   try {
     membership = await requireMembership();
-  } catch {
+  } catch (error) {
+    if (!isExpectedAuthError(error)) throw error;
     membership = undefined;
   }
-  const selectedMockEmail = cookieStore.get("mock_current_user")?.value ?? membership?.user.email ?? mockUsers[0].email;
+
+  if (!membership) {
+    return <div className="public-workspace">{children}</div>;
+  }
+
+  const selectedMockEmail = membership.user.email ?? mockUsers[0].email;
 
   const household = membership
     ? await prisma.household.findUnique({ where: { id: membership.householdId } })
@@ -61,7 +69,11 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
             <p className="eyebrow">{household?.name ?? "Family Grocery"}</p>
             <h1>{activeTrip ? `${activeTrip.activeShopper.user?.firstName ?? "Someone"} is shopping at ${activeTrip.store?.name ?? "Any Store"} now` : "Next grocery run"}</h1>
           </div>
-          <MockUserSwitcher users={mockUsers} currentEmail={selectedMockEmail} />
+          {mockMode ? (
+            <MockUserSwitcher users={mockUsers} currentEmail={selectedMockEmail} />
+          ) : (
+            <GoogleUserControls displayName={membership.user.displayName} email={membership.user.email} />
+          )}
         </header>
 
         {children}

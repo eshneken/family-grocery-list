@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
-import { prisma } from "@/lib/prisma";
-import type { CurrentUser } from "./types";
+import { normalizeEmail } from "./email";
+import type { AuthenticatedIdentity, CurrentUser } from "./types";
 
 export const mockUsers: CurrentUser[] = [
   {
@@ -41,40 +41,19 @@ export const mockUsers: CurrentUser[] = [
   }
 ];
 
-export async function getCurrentUser(): Promise<CurrentUser> {
+export async function getMockIdentity(): Promise<AuthenticatedIdentity> {
   const cookieStore = await cookies();
-  const selectedEmail =
+  const selectedEmail = normalizeEmail(
     cookieStore.get("mock_current_user")?.value ??
     process.env.MOCK_CURRENT_USER_EMAIL ??
-    mockUsers[0].email;
+    mockUsers[0].email
+  );
   const mock = mockUsers.find((user) => user.email === selectedEmail) ?? mockUsers[0];
 
-  const user = await prisma.user.upsert({
-    where: { email: mock.email.toLowerCase() },
-    update: {
-      firstName: mock.firstName,
-      lastName: mock.lastName,
-      displayName: mock.displayName,
-      imageUrl: mock.imageUrl,
-      authProvider: "mock"
-    },
-    create: {
-      email: mock.email.toLowerCase(),
-      firstName: mock.firstName,
-      lastName: mock.lastName,
-      displayName: mock.displayName,
-      imageUrl: mock.imageUrl,
-      authProvider: "mock"
-    }
-  });
-
   return {
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    displayName: user.displayName ?? user.firstName,
-    imageUrl: user.imageUrl,
+    email: mock.email,
+    displayName: mock.displayName,
+    imageUrl: mock.imageUrl,
     provider: "mock"
   };
 }

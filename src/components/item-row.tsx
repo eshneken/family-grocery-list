@@ -31,7 +31,13 @@ export function ItemRow(props: ItemRowProps) {
         </div>
         <div className="item-meta">
           <span>{props.storeName ?? "Any Store"}</span>
-          {props.requesterImage ? <img src={props.requesterImage} alt="" className="avatar" /> : <span className="avatar avatar-fallback">{props.requesterName ?? "Family"}</span>}
+          {props.requesterImage ? (
+            // Identity-provider avatars can use external hosts that are not known at build time.
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={props.requesterImage} alt="" className="avatar" />
+          ) : (
+            <span className="avatar avatar-fallback">{props.requesterName ?? "Family"}</span>
+          )}
           <span>{props.requesterName ?? "Family"}</span>
         </div>
         {!props.shopperActions && props.status === "pending" ? (

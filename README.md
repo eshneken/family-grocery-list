@@ -2,7 +2,7 @@
 
 Family Grocery List is a responsive web app for collecting, organizing, shopping, and reviewing a household grocery list. It is built for a shared family workflow where requestors add items, shoppers run store-specific trips, and admins manage household access and store configuration.
 
-The current implementation is a local/mock-auth version of the product. Google federation is intentionally deferred until the core household, list, and shopping lifecycle is stable.
+Production authentication federates with Google and authorizes only active household memberships whose stored Gmail address matches Google's verified email claim. Local development and E2E can explicitly enable the retained mock provider.
 
 ## What It Does
 
@@ -39,7 +39,7 @@ The current implementation is a local/mock-auth version of the product. Google f
 
 - `src/app/` - Next.js routes and server actions.
 - `src/components/` - Shared UI components.
-- `src/features/auth/` - Mock auth and authorization helpers.
+- `src/features/auth/` - Google/mock identity providers and stored-membership authorization.
 - `src/features/household/` - Household, member, and store services.
 - `src/features/parser/` - Grocery request parsing and category inference.
 - `src/features/shopping/` - List, trip, history, outcome, and suggestion services.
@@ -88,10 +88,10 @@ npm run db:migrate
 npm run db:seed
 ```
 
-6. Start the development server:
+6. Start the development server in local mock mode:
 
 ```bash
-npm run dev
+npm run dev -- --mock-auth
 ```
 
 7. Open the app:
@@ -100,7 +100,7 @@ npm run dev
 http://localhost:3000
 ```
 
-The dev server is configured to bind to `0.0.0.0`, so you can also test from another device on your network by opening your computer's LAN IP address with port `3000`.
+The dev server is configured to bind to `0.0.0.0`, so mock mode can also be tested from another device on your network. Real Google login over plain HTTP should use `http://localhost:3000`; Google's localhost exception does not apply to arbitrary LAN addresses.
 
 ## Seeded Local Data
 
@@ -121,32 +121,60 @@ Seeded grocery data includes recurring staples and store-specific examples such 
 
 ## Mock Authentication
 
-Local authentication is mocked. The current user comes from this priority order:
+Mock authentication is enabled only by the local command-line flag:
+
+```bash
+npm run dev -- --mock-auth
+```
+
+The current mock user comes from this priority order:
 
 1. The `mock_current_user` cookie.
 2. `MOCK_CURRENT_USER_EMAIL` in `.env`.
 3. The first built-in mock user.
 
-Use the mock user switcher in the app header to switch users. After switching users, the app returns to the shopping list page so local testing does not leave a non-admin user stranded on an admin-only route.
+Use the mock user switcher in the app header to switch users. Unknown cookie/action values cannot create arbitrary users. After switching users, the app returns to the shopping list page so local testing does not leave a non-admin user stranded on an admin-only route.
 
-Google federation is not implemented yet. Do not deploy this app publicly with mock auth enabled.
+Mock mode is rejected when `APP_ENV=production`. It is never a production fallback.
+
+## Google Authentication
+
+Running without `--mock-auth` selects Google by default. Local Google development does not require TLS. Create a Google Web OAuth client with this authorized redirect URI:
+
+```text
+http://localhost:3000/api/auth/callback/google
+```
+
+Configure `.env`:
+
+```bash
+APP_ENV="development"
+GOOGLE_CLIENT_ID="..."
+GOOGLE_CLIENT_SECRET="..."
+NEXTAUTH_SECRET="...at least 32 random bytes..."
+NEXTAUTH_URL="http://localhost:3000"
+```
+
+Then run `npm run dev` and open `http://localhost:3000`. Google must return a verified email that exactly matches an active `Membership.approvedEmail`; case and surrounding whitespace normalize, but Gmail dots and `+suffix` aliases remain distinct.
 
 ## Running The App
 
-For local development:
+For local mock development:
 
 ```bash
-npm run dev
+npm run dev -- --mock-auth
 ```
 
-For a production-style local run:
+For local Google development, configure the Google variables above and run `npm run dev` without the flag.
+
+For a production-style local mock run used by E2E:
 
 ```bash
 npm run build
-npm run start
+APP_ENV=test npm run start -- --mock-auth
 ```
 
-The `start` script also binds to `0.0.0.0`.
+`npm start` defaults to `APP_ENV=production` and Google auth. The `start` script also binds to `0.0.0.0`.
 
 ## Database Commands
 
@@ -177,6 +205,14 @@ npm run db:seed
 
 The seed script deletes existing app data before inserting the local fixture household.
 
+For the first production household, run the non-destructive bootstrap after migrations:
+
+```bash
+npm run db:bootstrap -- --admin-email family-admin@gmail.com --household-name "Shneken Family"
+```
+
+An identical rerun is a no-op. A conflicting administrator or household fails without changing data.
+
 ## Testing
 
 Run TypeScript checks:
@@ -203,10 +239,17 @@ Run Playwright E2E tests:
 npm run e2e
 ```
 
+Run the production-default Google login shell test without contacting Google's hosted UI:
+
+```bash
+npm run e2e:google-shell
+```
+
 The E2E test runner:
 
 - Builds the Next.js app.
 - Starts a production Next server on `http://127.0.0.1:3100`.
+- Enables mock auth explicitly with `APP_ENV=test` and `--mock-auth`.
 - Runs tests serially against Desktop Chrome and Mobile Safari profiles.
 - Resets and seeds the E2E database before each test.
 
@@ -218,6 +261,7 @@ Unit and service tests cover:
 
 - Request parsing and category inference.
 - Member approval, updates, status changes, and store configuration.
+- Google verified-email allowlisting, disabled memberships, auth modes, and bootstrap conflicts.
 - Duplicate request prevention.
 - Category correction and recurring staple learning.
 - Recurring staple seeding.
@@ -231,6 +275,7 @@ E2E tests cover:
 
 - Opening the requestor list.
 - Switching mock users.
+- Rejecting unknown mock-user cookies.
 - Adding an item and updating category/recurring status.
 - Starting a shopping run.
 - Purchasing an item.
@@ -249,9 +294,11 @@ npm test
 npm run test:coverage
 npm run test:watch
 npm run e2e
+npm run e2e:google-shell
 npm run db:generate
 npm run db:migrate
 npm run db:seed
+npm run db:bootstrap -- --admin-email <email> --household-name <name>
 ```
 
 ## Git Hygiene

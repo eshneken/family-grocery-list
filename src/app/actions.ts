@@ -7,6 +7,9 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/features/auth/authorization";
+import { normalizeEmail } from "@/features/auth/email";
+import { isMockAuthEnabled } from "@/features/auth/mode";
+import { mockUsers } from "@/features/auth/mock-auth";
 import {
   addStore,
   approveMember,
@@ -38,12 +41,16 @@ export async function switchMockUserAction(formData: FormData) {
 }
 
 export async function switchMockUserEmailAction(email: string) {
+  if (!isMockAuthEnabled()) throw new Error("Mock user switching is disabled outside mock auth mode.");
+  const normalizedEmail = normalizeEmail(email);
+  if (!mockUsers.some((user) => user.email === normalizedEmail)) throw new Error("Unknown mock user.");
   const cookieStore = await cookies();
-  cookieStore.set("mock_current_user", email.trim().toLowerCase(), { path: "/", sameSite: "lax" });
+  cookieStore.set("mock_current_user", normalizedEmail, { path: "/", sameSite: "lax", httpOnly: true, secure: false });
   await refreshAll();
 }
 
 export async function createHouseholdAction() {
+  if (!isMockAuthEnabled()) throw new Error("Request-time household creation is available only in mock auth mode.");
   await ensureSeedHousehold();
   await refreshAll();
 }

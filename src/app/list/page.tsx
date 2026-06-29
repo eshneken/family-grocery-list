@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { addRequestAction } from "@/app/actions";
 import { GrocerySection } from "@/components/grocery-section";
 import { requireCapability } from "@/features/auth/authorization";
+import { redirectForAuthError } from "@/features/auth/navigation";
 import { getCurrentCollectingList, groupItemsByCategory } from "@/features/shopping/shopping.service";
 import { getCatalogSuggestions, getCommonSuggestions } from "@/features/shopping/suggestions";
 import { prisma } from "@/lib/prisma";
@@ -10,8 +10,8 @@ export default async function ListPage() {
   let requester;
   try {
     requester = await requireCapability("request");
-  } catch {
-    redirect("/unauthorized");
+  } catch (error) {
+    redirectForAuthError(error);
   }
 
   const [list, stores, activeTrip] = await Promise.all([

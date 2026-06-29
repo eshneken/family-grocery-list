@@ -1,14 +1,14 @@
-import { redirect } from "next/navigation";
 import { GrocerySection } from "@/components/grocery-section";
 import { requireCapability } from "@/features/auth/authorization";
+import { redirectForAuthError } from "@/features/auth/navigation";
 import { getHistory, groupItemsByCategory } from "@/features/shopping/shopping.service";
 
 export default async function HistoryPage() {
   let requester;
   try {
     requester = await requireCapability("request");
-  } catch {
-    redirect("/unauthorized");
+  } catch (error) {
+    redirectForAuthError(error);
   }
 
   const trips = await getHistory(requester.householdId);

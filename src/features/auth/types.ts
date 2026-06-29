@@ -1,5 +1,12 @@
 import type { Capability } from "@prisma/client";
 
+export type AuthenticatedIdentity = {
+  email: string;
+  displayName: string;
+  imageUrl: string | null;
+  provider: "mock" | "google";
+};
+
 export type CurrentUser = {
   id: string;
   email: string;

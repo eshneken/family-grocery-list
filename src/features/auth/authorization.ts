@@ -1,14 +1,8 @@
 import type { Capability } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { getCurrentUser } from "./mock-auth";
+import { CapabilityAuthorizationError, MembershipAuthorizationError } from "./errors";
+import { getAuthenticatedIdentity } from "./identity";
 import type { AuthorizedMembership } from "./types";
-
-export class AuthorizationError extends Error {
-  constructor(message = "You are not authorized for this household.") {
-    super(message);
-    this.name = "AuthorizationError";
-  }
-}
 
 export async function getPrimaryHouseholdId() {
   const household = await prisma.household.findFirst({ orderBy: { createdAt: "asc" } });
@@ -16,31 +10,25 @@ export async function getPrimaryHouseholdId() {
 }
 
 export async function requireMembership(householdId?: string): Promise<AuthorizedMembership> {
-  const user = await getCurrentUser();
+  const identity = await getAuthenticatedIdentity();
   const resolvedHouseholdId = householdId ?? (await getPrimaryHouseholdId());
 
   if (!resolvedHouseholdId) {
-    throw new AuthorizationError("No household has been created yet.");
+    throw new MembershipAuthorizationError("No household has been created yet.");
   }
 
   const membership = await prisma.membership.findUnique({
     where: {
       householdId_approvedEmail: {
         householdId: resolvedHouseholdId,
-        approvedEmail: user.email.toLowerCase()
+        approvedEmail: identity.email
       }
-    }
+    },
+    include: { user: true }
   });
 
-  if (!membership || membership.status !== "active") {
-    throw new AuthorizationError("This Google account is not approved for this household.");
-  }
-
-  if (!membership.userId) {
-    await prisma.membership.update({
-      where: { id: membership.id },
-      data: { userId: user.id }
-    });
+  if (!membership || membership.status !== "active" || !membership.user) {
+    throw new MembershipAuthorizationError();
   }
 
   return {
@@ -49,7 +37,15 @@ export async function requireMembership(householdId?: string): Promise<Authorize
     approvedEmail: membership.approvedEmail,
     status: "active",
     capabilities: membership.capabilities,
-    user
+    user: {
+      id: membership.user.id,
+      email: identity.email,
+      firstName: membership.user.firstName,
+      lastName: membership.user.lastName,
+      displayName: membership.user.displayName ?? identity.displayName,
+      imageUrl: membership.user.imageUrl ?? identity.imageUrl,
+      provider: identity.provider
+    }
   };
 }
 
@@ -57,7 +53,7 @@ export async function requireCapability(capability: Capability, householdId?: st
   const membership = await requireMembership(householdId);
 
   if (!membership.capabilities.includes(capability)) {
-    throw new AuthorizationError(`You need ${capability} access to do that.`);
+    throw new CapabilityAuthorizationError(capability);
   }
 
   return membership;

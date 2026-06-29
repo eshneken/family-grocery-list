@@ -1,7 +1,7 @@
-import { redirect } from "next/navigation";
 import { completeShoppingTripAction, startShoppingTripAction } from "@/app/actions";
 import { GrocerySection } from "@/components/grocery-section";
 import { requireCapability } from "@/features/auth/authorization";
+import { redirectForAuthError } from "@/features/auth/navigation";
 import { getCurrentCollectingList, getShopperView, groupItemsByCategory } from "@/features/shopping/shopping.service";
 import { prisma } from "@/lib/prisma";
 
@@ -9,8 +9,8 @@ export default async function ShopPage() {
   let shopper;
   try {
     shopper = await requireCapability("shop");
-  } catch {
-    redirect("/unauthorized");
+  } catch (error) {
+    redirectForAuthError(error);
   }
 
   const [stores, activeTrip, collectingList] = await Promise.all([

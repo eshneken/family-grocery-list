@@ -3,31 +3,36 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ulimit -n 8192 && next dev --turbo --hostname 0.0.0.0",
+    "dev": "ulimit -n 8192 && node scripts/run-next.mjs dev --turbo --hostname 0.0.0.0",
     "build": "next build",
-    "start": "next start --hostname 0.0.0.0",
-    "lint": "next lint",
+    "start": "node scripts/run-next.mjs start --hostname 0.0.0.0",
+    "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "e2e": "playwright test",
+    "e2e:google-shell": "playwright test --config playwright.google.config.ts",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts"
+    "db:seed": "tsx prisma/seed.ts",
+    "db:bootstrap": "tsx prisma/bootstrap.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",
     "lucide-react": "^0.468.0",
     "next": "^15.1.0",
+    "next-auth": "4.24.14",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "zod": "^3.24.1"
   },
   "overrides": {
-    "postcss": "^8.5.15"
+    "postcss": "^8.5.15",
+    "uuid": "11.1.1"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "3.3.5",
     "@playwright/test": "^1.49.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",

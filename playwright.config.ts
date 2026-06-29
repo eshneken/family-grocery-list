@@ -2,6 +2,7 @@ import { defineConfig, devices } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  testIgnore: "auth-shell.spec.ts",
   timeout: 30_000,
   fullyParallel: false,
   workers: 1,
@@ -10,7 +11,7 @@ export default defineConfig({
     trace: "on-first-retry"
   },
   webServer: {
-    command: "npm run build && PORT=3100 npm run start",
+    command: "npm run build && APP_ENV=test PORT=3100 npm run start -- --mock-auth",
     url: "http://127.0.0.1:3100",
     reuseExistingServer: false,
     timeout: 120_000

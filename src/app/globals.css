@@ -137,6 +137,33 @@ a {
   font-weight: 700;
 }
 
+.auth-controls {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.auth-controls span {
+  align-items: flex-end;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.auth-controls small {
+  color: var(--color-muted);
+}
+
+.public-workspace {
+  min-height: 100vh;
+}
+
+.auth-page {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+}
+
 input,
 select {
   min-height: 44px;

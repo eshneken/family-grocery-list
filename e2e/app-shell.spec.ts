@@ -30,6 +30,20 @@ test("mock user switch lands on the list page", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "What should go on the next list?" })).toBeVisible();
 });
 
+test("an unknown mock cookie cannot select or create an arbitrary user", async ({ page, context }) => {
+  await context.addCookies([
+    {
+      name: "mock_current_user",
+      value: "attacker@example.com",
+      domain: "127.0.0.1",
+      path: "/"
+    }
+  ]);
+
+  await page.goto("/list");
+  await expect(page.getByLabel("Current user")).toHaveValue("gina@example.com");
+});
+
 test("requestor adds an item and updates its category and recurring flag", async ({ page }) => {
   await page.goto("/list");
 

@@ -1,11 +1,8 @@
 import type { Capability, Prisma } from "@prisma/client";
+import { normalizeEmail } from "@/features/auth/email";
 import { prisma } from "@/lib/prisma";
 
 export const defaultStores = ["Giant", "Whole Foods", "Trader Joe's"];
-
-export function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
-}
 
 export async function createHousehold(name: string, adminEmail: string) {
   const normalizedEmail = normalizeEmail(adminEmail);

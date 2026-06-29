@@ -1,14 +1,14 @@
-import { redirect } from "next/navigation";
 import { addStoreAction, approveMemberAction, configureStoresAction, setMemberStatusAction, updateMemberAction } from "@/app/actions";
 import { requireCapability } from "@/features/auth/authorization";
+import { redirectForAuthError } from "@/features/auth/navigation";
 import { prisma } from "@/lib/prisma";
 
 export default async function AdminPage() {
   let admin;
   try {
     admin = await requireCapability("administer");
-  } catch {
-    redirect("/unauthorized");
+  } catch (error) {
+    redirectForAuthError(error);
   }
 
   const [memberships, stores] = await Promise.all([
