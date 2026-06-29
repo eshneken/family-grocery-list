@@ -466,7 +466,7 @@ Lane A and the initial bootstrap service in C can start in parallel if C tempora
 
 - `npm run lint`: passed with zero findings.
 - `npm run typecheck`: passed.
-- `npm test`: 73 tests passed across 14 files.
+- `npm test`: 75 tests passed across 15 files.
 - `npm run test:coverage`: 98.39% statements, 94.56% branches, 97.72% functions, 99.29% lines.
 - `npm run build`: production build passed and emitted the auth route plus middleware.
 - `npm run e2e`: 10 mock-mode journeys passed in Desktop Chrome and Mobile Safari.

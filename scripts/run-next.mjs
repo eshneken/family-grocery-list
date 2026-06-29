@@ -1,10 +1,18 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
+import nextEnv from "@next/env";
 import { resolveLaunchConfig } from "./run-next-config.mjs";
 
-export function launchNext(argv = process.argv.slice(2), sourceEnv = process.env) {
-  const config = resolveLaunchConfig(argv, sourceEnv);
+const { loadEnvConfig } = nextEnv;
+
+export function prepareLaunchConfig(argv, sourceEnv = process.env, loadEnvironment = loadEnvConfig) {
+  loadEnvironment(process.cwd(), argv[0] === "dev");
+  return resolveLaunchConfig(argv, sourceEnv);
+}
+
+export function launchNext(argv = process.argv.slice(2), sourceEnv = process.env, loadEnvironment = loadEnvConfig) {
+  const config = prepareLaunchConfig(argv, sourceEnv, loadEnvironment);
   const nextBin = path.resolve("node_modules/next/dist/bin/next");
   const child = spawn(process.execPath, [nextBin, config.command, ...config.forwardedArgs], {
     env: config.env,
