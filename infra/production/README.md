@@ -27,5 +27,5 @@ The `terraform.tfvars` file is ignored. Do not place a PostgreSQL password, GitH
 - The PostgreSQL system has no public IP. Administrative access is through a time-limited OCI Bastion port-forwarding session added in the operations workstream.
 - `oci_core_public_ip.grocery` is reserved now. The later Kubernetes `LoadBalancer` Service must attach this address with OCI CCM annotations; Terraform must not create static load-balancer backends.
 - `bastion_client_cidr` is required. Use the administrator's current public IPv4 `/32` or IPv6 `/128`; Terraform rejects broader networks.
-- `node_availability_domain` is supplied explicitly so CI does not require a tenancy-level Availability Domains lookup.
+- `node_availability_domain` and `node_image_ocid` are supplied explicitly so CI does not require tenancy-level Availability Domains or OKE node-option lookups.
 - The selected Kubernetes version and PostgreSQL service shape/version must be confirmed in Ashburn immediately before the first plan/apply.
