@@ -10,6 +10,10 @@ on:
         options:
           - deploy
           - destroy
+      confirm_destroy:
+        description: Type DESTROY when operation is destroy. Leave blank for deploy.
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -45,6 +49,8 @@ jobs:
     steps:
       - name: Validate environment values
         env:
+          INFRA_OPERATION: ${{ inputs.operation }}
+          DESTROY_CONFIRMATION: ${{ inputs.confirm_destroy }}
           OCI_WIF_DOMAIN_URL: ${{ vars.OCI_WIF_DOMAIN_URL }}
           OCI_WIF_CLIENT_ID: ${{ vars.OCI_WIF_CLIENT_ID }}
           OCI_WIF_CLIENT_SECRET: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
@@ -84,6 +90,10 @@ jobs:
             echo 'OCI_OKE_KUBERNETES_VERSION must start with v.' >&2
             exit 1
           }
+          if [[ "$INFRA_OPERATION" == 'destroy' && "$DESTROY_CONFIRMATION" != 'DESTROY' ]]; then
+            echo 'Destroy requires confirm_destroy to be exactly DESTROY.' >&2
+            exit 1
+          fi
           python3 - "$TF_VAR_bastion_client_cidr" <<'PY'
           import ipaddress
           import sys
@@ -93,6 +103,18 @@ jobs:
           except ValueError as exc:
               raise SystemExit(f"OCI_BASTION_CLIENT_CIDR is invalid: {exc}") from exc
           PY
+
+  approve-destroy:
+    name: Approve production destroy
+    if: inputs.operation == 'destroy'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production-destroy-approval
+    permissions: {}
+    steps:
+      - name: Record approval
+        shell: bash
+        run: echo 'Production infrastructure destroy approved.'
 
   deploy-bootstrap:
     name: Deploy bootstrap
@@ -279,7 +301,7 @@ jobs:
   destroy-cluster-foundation:
     name: Destroy cluster foundation
     if: inputs.operation == 'destroy'
-    needs: validate
+    needs: approve-destroy
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 60
