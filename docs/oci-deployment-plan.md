@@ -8,10 +8,10 @@ This plan defines the infrastructure-as-code and delivery pipelines for deployin
 
 | Decision | Selected approach |
 |---|---|
-| OCI region | US East (Ashburn), `us-ashburn-1` / IAD |
+| OCI region | Supplied through ignored Terraform variables |
 | Compartment | Existing application compartment supplied as an input |
-| Production URL | `https://grocery.shnekendorf.com` |
-| DNS | Existing `shnekendorf.com` OCI DNS zone in the tenancy root compartment |
+| Production URL | `https://<app-hostname>` supplied through ignored Terraform variables |
+| DNS | Existing OCI DNS zone supplied through ignored Terraform variables; its owning compartment is explicit |
 | Environments | Production only; development and staging remain local |
 | Application authentication | Google OAuth with an explicit user allowlist; mock authentication cannot be deployed publicly |
 | OKE control plane | Public API endpoint secured with GitHub OIDC claims and Kubernetes RBAC |
@@ -48,7 +48,7 @@ The existing `prisma` package is a development dependency and there is no produc
 
  Internet
     |
-    | HTTPS grocery.shnekendorf.com
+    | HTTPS <app-hostname>
     v
  OCI DNS A record
     |
@@ -136,11 +136,11 @@ The application connection string must include `sslmode=verify-full` and the CA 
 
 | Variable | Default | Notes |
 |---|---:|---|
-| `region` | `us-ashburn-1` | IAD |
+| `region` | required local input | Deployment region |
 | `tenancy_ocid` | required | Also identifies the root compartment for DNS lookup |
 | `compartment_ocid` | required | Existing app compartment |
-| `dns_zone_name` | `shnekendorf.com` | Existing zone; Terraform does not create or replace it |
-| `app_hostname` | `grocery.shnekendorf.com` | Production URL and Google OAuth callback base |
+| `dns_zone_name` | required local input | Existing zone; Terraform does not create or replace it |
+| `app_hostname` | required local input | Production URL and Google OAuth callback base |
 | `acme_email` | required | Let's Encrypt account notifications |
 | `github_repository` | `eshneken/family-grocery-list` | Used in OIDC claim restrictions |
 | `github_default_branch` | `master` | Used in OIDC claim restrictions |
@@ -252,7 +252,7 @@ Store endpoint, namespace, and cluster CA values as GitHub repository or environ
 - `OKE_CA_CERT_B64`
 - `OKE_OIDC_AUDIENCE`
 - `APP_HOSTNAME`
-- `NEXTAUTH_URL` (`https://grocery.shnekendorf.com`)
+- `NEXTAUTH_URL` (`https://<app-hostname>`)
 
 The PostgreSQL service CA is placed in a ConfigMap and mounted read-only into migration and application containers. Prisma uses the mounted path in the connection parameters.
 
@@ -413,7 +413,7 @@ Database migrations are not rolled back automatically. Schema changes must follo
 - Use a rolling strategy that can temporarily run a second app pod on the same worker.
 - Add a non-database liveness endpoint and a database-aware readiness endpoint.
 - Wait for `kubectl rollout status`.
-- Test `https://grocery.shnekendorf.com` and its readiness endpoint.
+- Test `https://<app-hostname>` and its readiness endpoint.
 - On smoke-test failure, roll back the application image and alert in the workflow summary.
 - Caddy is not restarted during application releases.
 
@@ -425,7 +425,7 @@ Implement and test Google OAuth locally before the first public deployment. The 
 
 Required behavior:
 
-- OAuth callback uses `https://grocery.shnekendorf.com`.
+- OAuth callback uses `https://<app-hostname>`.
 - Only explicitly approved email addresses can create a session.
 - Session cookies are `Secure`, `HttpOnly`, and use an appropriate `SameSite` policy.
 - Unapproved accounts receive a clear denial and no user row is created.
