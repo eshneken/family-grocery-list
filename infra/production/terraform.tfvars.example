@@ -1,0 +1,17 @@
+tenancy_ocid              = "ocid1.tenancy.oc1..replace-me"
+compartment_ocid          = "ocid1.compartment.oc1..replace-me"
+region                    = "replace-with-oci-region"
+dns_zone_name             = "replace-with-dns-zone-name"
+app_hostname              = "replace-with-app-hostname"
+dns_zone_compartment_ocid = "ocid1.tenancy.oc1..replace-me"
+
+# Pick a currently supported OKE version in your selected region before applying.
+oke_kubernetes_version   = "v1.36.0"
+node_availability_domain = "replace-with-tenancy-specific-ad-name"
+node_ssh_public_key      = "ssh-ed25519 AAAA... replace with your public key"
+bastion_client_cidr      = "203.0.113.14/32" # Replace with your current public IP/CIDR.
+postgres_backup_start    = "02:00" # Optional: UTC 24-hour start time.
+
+# Copy these from `infra/bootstrap` outputs after the one-time bootstrap apply.
+vault_id     = "ocid1.vault.oc1..replace-me"
+vault_key_id = "ocid1.key.oc1..replace-me"
