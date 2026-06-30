@@ -2,11 +2,6 @@ name: Verify OCI workload identity
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - codex/oci-iac
-    paths:
-      - .github/workflows/oci-wif-verify.yml
 
 permissions:
   contents: read
