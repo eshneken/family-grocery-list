@@ -31,13 +31,68 @@ Generate a session secret locally with:
 openssl rand -base64 32
 ```
 
-Set the Google OAuth authorized redirect URI to:
+The initialization values are GitHub secrets because they may contain personal information. They are copied into a temporary Kubernetes Secret only when initialization is required, and that Secret is deleted after the bootstrap Job finishes.
 
-```text
-https://<OCI_APP_HOSTNAME>/api/auth/callback/google
+## Production Google OAuth Setup
+
+Use a dedicated production OAuth client. Do not reuse the local client or add the production callback to it; separating the clients keeps localhost credentials and production credentials independently rotatable.
+
+Google Auth Platform settings have two scopes:
+
+- **Branding**, **Audience**, and **Data Access** belong to the Google Cloud project and are shared by every OAuth client in that project.
+- Client IDs, client secrets, authorized origins, and redirect URIs belong to an individual OAuth client.
+
+The local and production clients represent the same application, so they can and normally should share the existing Google Cloud project. Create a second project only when the environments need different branding, audiences, data scopes, owners, or administrative boundaries.
+
+1. Open the [Google Cloud console](https://console.cloud.google.com/) and select the project that already owns the local OAuth client.
+2. Open **Google Auth Platform** > **Branding** and review the shared consent screen:
+   - App name: `Family Grocery List`
+   - User support email: an address you monitor
+   - Authorized domain: `shnekendorf.com`
+   - Developer contact email: an address you monitor
+   - If publishing the app, add the public application home page and the policy URLs Google requires. Do not enter placeholder or login-protected URLs.
+
+   Adding `shnekendorf.com` permits the project's clients to use that domain and its subdomains. It does not remove or invalidate the local client's `localhost` redirect; localhost is a special development exception and is not entered as an authorized domain.
+
+3. Open **Audience** and select **External** for consumer Gmail accounts. If every intended user belongs to the same managed Google Workspace organization, **Internal** is also valid but blocks all accounts outside that organization.
+4. The application requests only the standard `openid`, `email`, and `profile` sign-in scopes. Google exempts this scope set from Testing mode's test-user restriction, warning, and seven-day authorization expiration. For this personal deployment, leaving the shared project in **Testing** is acceptable. Publishing it is optional; if you choose **Publish app**, complete the branding, domain-ownership, and policy-page requirements shown by the console.
+5. Open **Data Access** and confirm the configured scopes are limited to `openid`, the Google account email address, and basic profile information. Do not add Google API scopes that the application does not use.
+6. Open **Clients**, choose **Create client**, and select **Web application**. Name it `Family Grocery List Production`.
+7. Leave **Authorized JavaScript origins** empty. Auth.js performs this OAuth exchange on the server and does not use Google's browser JavaScript client.
+8. Add this **Authorized redirect URI** exactly, with no trailing slash:
+
+   ```text
+   https://grocery.shnekendorf.com/api/auth/callback/google
+   ```
+
+   Google compares the scheme, hostname, port, path, case, and trailing slash exactly. Production redirect URIs must use HTTPS. Do not add `localhost`, an IP address, a wildcard, or a preview hostname to this client.
+9. Create the client and immediately store its client ID and newly issued client secret in the GitHub `production` environment:
+
+   - Repository **Settings** > **Environments** > **production** > **Environment secrets**
+   - Replace `GOOGLE_CLIENT_ID` with the production web client ID.
+   - Replace `GOOGLE_CLIENT_SECRET` with the matching production client secret.
+
+   With GitHub CLI, run the following from the repository and enter each value only when prompted:
+
+   ```bash
+   gh secret set GOOGLE_CLIENT_ID --env production
+   gh secret set GOOGLE_CLIENT_SECRET --env production
+   ```
+
+   Never commit the client secret or place it in a GitHub variable. GitHub does not expose an existing secret value, so updating these names safely replaces the prior local-client credentials.
+10. Confirm `INITIAL_ADMIN_EMAIL` in the same GitHub environment is the exact Gmail address that will sign in. The application's database allowlist remains the authorization boundary even though Google's basic sign-in scopes do not require the account to be listed as an OAuth test user.
+
+Before starting or rerunning a production deployment, verify DNS and TLS reach Caddy rather than a localhost service:
+
+```bash
+curl --show-error --head https://grocery.shnekendorf.com/
 ```
 
-The initialization values are GitHub secrets because they may contain personal information. They are copied into a temporary Kubernetes Secret only when initialization is required, and that Secret is deleted after the bootstrap Job finishes.
+Before the first application deployment, an HTTP `502` with `server: Caddy` is expected because Caddy has no application upstream yet. A DNS error, certificate error, or response from an unrelated server is not expected.
+
+After deployment, open `https://grocery.shnekendorf.com`, select **Sign in with Google**, and complete one login with `INITIAL_ADMIN_EMAIL`. A `redirect_uri_mismatch` response means the URI in step 8 or the deployed client ID does not match. An `org_internal` response means the project is restricted to a Google Workspace organization that does not contain the signing-in account.
+
+Google's [web-server OAuth guide](https://developers.google.com/identity/protocols/oauth2/web-server) documents exact redirect URI matching, and [Manage App Audience](https://support.google.com/cloud/answer/15549945) describes Testing and In production behavior.
 
 ## GHCR Publication
 

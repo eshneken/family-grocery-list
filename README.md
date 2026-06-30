@@ -250,6 +250,8 @@ Google must return a verified email that exactly matches an active `Membership.a
 | Google sign-in completes but the app denies access | In mock mode, add that exact Gmail address as an active local member. Gmail dot and `+suffix` variants are different app identities. |
 | The wrong Google account is selected | Choose **Use another account** in Google’s account chooser, or use a private/incognito browser window. |
 
+Production uses a separate Google OAuth web client and the HTTPS callback for `grocery.shnekendorf.com`; do not reuse the localhost client. Follow [Production Google OAuth Setup](deploy/README.md#production-google-oauth-setup) before the first application deployment or whenever rotating the production client secret.
+
 For local HTTP, the session cookie is still `HttpOnly` and `SameSite=Lax`, but it is not marked `Secure`; that is expected because `Secure` cookies require HTTPS. Production uses HTTPS and therefore secure cookies.
 
 ## Running The App
