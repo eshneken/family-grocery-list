@@ -7,6 +7,12 @@ variable "region" {
   type = string
 }
 
+variable "oci_auth" {
+  description = "OCI provider and remote-state authentication mode. GitHub Actions uses SecurityToken; local runs default to ApiKey."
+  type        = string
+  default     = "ApiKey"
+}
+
 variable "compartment_ocid" {
   description = "Compartment containing the CCM-created public load balancer."
   type        = string

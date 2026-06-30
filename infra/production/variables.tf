@@ -12,6 +12,12 @@ variable "region" {
   type = string
 }
 
+variable "oci_auth" {
+  description = "OCI provider authentication mode. GitHub Actions uses SecurityToken; local runs default to ApiKey."
+  type        = string
+  default     = "ApiKey"
+}
+
 variable "dns_zone_name" {
   type = string
 }

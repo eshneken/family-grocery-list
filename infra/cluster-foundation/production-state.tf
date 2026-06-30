@@ -6,6 +6,7 @@ data "terraform_remote_state" "production" {
     namespace = var.state_namespace
     key       = var.production_state_key
     region    = var.region
+    auth      = var.oci_auth
   }
 }
 

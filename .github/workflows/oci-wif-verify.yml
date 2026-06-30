@@ -13,143 +13,21 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 10
-    env:
-      WIF_DIR: /tmp/oci-wif-${{ github.run_id }}
-
     steps:
-      - name: Validate WIF configuration
-        env:
-          OCI_REGION: ${{ vars.OCI_REGION }}
-          OCI_TENANCY_OCID: ${{ vars.OCI_TENANCY_OCID }}
-          OCI_WIF_AUDIENCE: ${{ vars.OCI_WIF_AUDIENCE }}
-          OCI_WIF_CLIENT_ID: ${{ vars.OCI_WIF_CLIENT_ID }}
-          OCI_WIF_DOMAIN_URL: ${{ vars.OCI_WIF_DOMAIN_URL }}
-          OCI_WIF_SERVICE_USER_OCID: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
-          OCI_WIF_CLIENT_SECRET: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: ./.github/actions/setup-oci-wif
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Record verification
         shell: bash
         run: |
-          set -euo pipefail
-          required=(
-            OCI_REGION
-            OCI_TENANCY_OCID
-            OCI_WIF_AUDIENCE
-            OCI_WIF_CLIENT_ID
-            OCI_WIF_DOMAIN_URL
-            OCI_WIF_SERVICE_USER_OCID
-            OCI_WIF_CLIENT_SECRET
-          )
-          for name in "${required[@]}"; do
-            if [[ -z "${!name:-}" ]]; then
-              echo "Missing production environment value: ${name}" >&2
-              exit 1
-            fi
-          done
-
-      - name: Install OCI CLI
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 -m pip install --disable-pip-version-check --quiet "oci-cli==3.89.0"
-          oci --version
-
-      - name: Generate ephemeral proof-of-possession key
-        shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
-          mkdir -p "$WIF_DIR"
-          openssl genpkey \
-            -algorithm RSA \
-            -pkeyopt rsa_keygen_bits:2048 \
-            -out "$WIF_DIR/private.pem" 2>/dev/null
-          openssl pkey \
-            -in "$WIF_DIR/private.pem" \
-            -pubout \
-            -out "$WIF_DIR/public.pem"
-          openssl pkey \
-            -pubin \
-            -in "$WIF_DIR/public.pem" \
-            -outform DER |
-            openssl base64 -A > "$WIF_DIR/public-key.b64"
-
-      - name: Exchange GitHub token for OCI security token
-        env:
-          OCI_WIF_AUDIENCE: ${{ vars.OCI_WIF_AUDIENCE }}
-          OCI_WIF_CLIENT_ID: ${{ vars.OCI_WIF_CLIENT_ID }}
-          OCI_WIF_CLIENT_SECRET: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
-          OCI_WIF_DOMAIN_URL: ${{ vars.OCI_WIF_DOMAIN_URL }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
-
-          oidc_response="$(
-            curl --fail-with-body --silent --show-error \
-              -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
-              "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OCI_WIF_AUDIENCE}"
-          )"
-          jq -jer '.value' <<<"$oidc_response" > "$WIF_DIR/github-oidc.jwt"
-          python3 - "$WIF_DIR/github-oidc.jwt" <<'PY'
-          import base64
-          import json
-          import pathlib
-          import sys
-
-          token = pathlib.Path(sys.argv[1]).read_text()
-          segment = token.split('.')[1]
-          segment += '=' * (-len(segment) % 4)
-          claims = json.loads(base64.urlsafe_b64decode(segment))
-          print(json.dumps({key: claims.get(key) for key in ('iss', 'aud', 'sub')}, indent=2))
-          PY
-
-          exchange_status="$(
-            curl --silent --show-error \
-              --output "$WIF_DIR/exchange-response.json" \
-              --write-out '%{http_code}' \
-              --user "${OCI_WIF_CLIENT_ID}:${OCI_WIF_CLIENT_SECRET}" \
-              --header 'Content-Type: application/x-www-form-urlencoded' \
-              --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
-              --data-urlencode 'requested_token_type=urn:oci:token-type:oci-upst' \
-              --data-urlencode "public_key@${WIF_DIR}/public-key.b64" \
-              --data-urlencode "subject_token@${WIF_DIR}/github-oidc.jwt" \
-              --data-urlencode 'subject_token_type=jwt' \
-              "${OCI_WIF_DOMAIN_URL%/}/oauth2/v1/token"
-          )"
-          if [[ "$exchange_status" != 2* ]]; then
-            echo "OCI token exchange failed with HTTP ${exchange_status}." >&2
-            jq '{error, error_description, code, message}' \
-              "$WIF_DIR/exchange-response.json" >&2
-            exit 1
-          fi
-          jq -jer '.token' "$WIF_DIR/exchange-response.json" > "$WIF_DIR/security-token"
-
-      - name: Verify read-only OCI API access
-        env:
-          OCI_REGION: ${{ vars.OCI_REGION }}
-          OCI_TENANCY_OCID: ${{ vars.OCI_TENANCY_OCID }}
-          OCI_WIF_SERVICE_USER_OCID: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          umask 077
           {
-            echo '[WIF]'
-            echo "user=${OCI_WIF_SERVICE_USER_OCID}"
-            echo "tenancy=${OCI_TENANCY_OCID}"
-            echo "region=${OCI_REGION}"
-            echo "key_file=${WIF_DIR}/private.pem"
-            echo "security_token_file=${WIF_DIR}/security-token"
-          } > "$WIF_DIR/config"
-
-          namespace="$(
-            oci os ns get \
-              --auth security_token \
-              --config-file "$WIF_DIR/config" \
-              --profile WIF \
-              --query data \
-              --raw-output
-          )"
-          test -n "$namespace"
-          echo 'OCI WIF token exchange and authenticated API call succeeded.'
-          echo '### OCI WIF verification passed' >> "$GITHUB_STEP_SUMMARY"
-          echo 'GitHub exchanged its OIDC token for an OCI security token and completed a read-only Object Storage namespace request.' >> "$GITHUB_STEP_SUMMARY"
+            echo '### OCI WIF verification passed'
+            echo 'GitHub exchanged its OIDC token for an OCI security token and completed a read-only Object Storage namespace request.'
+          } >> "$GITHUB_STEP_SUMMARY"

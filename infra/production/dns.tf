@@ -11,6 +11,11 @@ resource "oci_core_public_ip" "grocery" {
   display_name   = "family-grocery-lb"
   lifetime       = "RESERVED"
   freeform_tags  = local.common_tags
+
+  lifecycle {
+    # OCI CCM attaches this reserved address to its load balancer.
+    ignore_changes = [private_ip_id]
+  }
 }
 
 resource "oci_dns_rrset" "grocery" {
@@ -18,7 +23,7 @@ resource "oci_dns_rrset" "grocery" {
   domain          = "${var.app_hostname}."
   rtype           = "A"
   items {
-    domain = "${var.app_hostname}."
+    domain = var.app_hostname
     rdata  = oci_core_public_ip.grocery.ip_address
     rtype  = "A"
     ttl    = var.dns_ttl

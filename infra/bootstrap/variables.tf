@@ -15,6 +15,12 @@ variable "region" {
   type        = string
 }
 
+variable "oci_auth" {
+  description = "OCI provider authentication mode. GitHub Actions uses SecurityToken; local runs default to ApiKey."
+  type        = string
+  default     = "ApiKey"
+}
+
 variable "state_bucket_name" {
   description = "Globally unique Object Storage bucket name for Terraform state."
   type        = string
