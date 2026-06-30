@@ -88,10 +88,12 @@ jobs:
               -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OCI_WIF_AUDIENCE}"
           )"
-          jq -er '.value' <<<"$oidc_response" > "$WIF_DIR/github-oidc.jwt"
+          jq -jer '.value' <<<"$oidc_response" > "$WIF_DIR/github-oidc.jwt"
 
-          exchange_response="$(
-            curl --fail-with-body --silent --show-error \
+          exchange_status="$(
+            curl --silent --show-error \
+              --output "$WIF_DIR/exchange-response.json" \
+              --write-out '%{http_code}' \
               --user "${OCI_WIF_CLIENT_ID}:${OCI_WIF_CLIENT_SECRET}" \
               --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
               --data-urlencode 'requested_token_type=urn:oci:token-type:oci-upst' \
@@ -100,7 +102,13 @@ jobs:
               --data-urlencode 'subject_token_type=jwt' \
               "${OCI_WIF_DOMAIN_URL%/}/oauth2/v1/token"
           )"
-          jq -er '.token' <<<"$exchange_response" > "$WIF_DIR/security-token"
+          if [[ "$exchange_status" != 2* ]]; then
+            echo "OCI token exchange failed with HTTP ${exchange_status}." >&2
+            jq '{error, error_description, code, message}' \
+              "$WIF_DIR/exchange-response.json" >&2
+            exit 1
+          fi
+          jq -jer '.token' "$WIF_DIR/exchange-response.json" > "$WIF_DIR/security-token"
 
       - name: Verify read-only OCI API access
         env:
