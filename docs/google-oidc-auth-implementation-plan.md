@@ -140,7 +140,7 @@ Do not treat `NODE_ENV` as the authorization for mock mode because Playwright in
 | `GOOGLE_CLIENT_ID` | not required | required | required secret |
 | `GOOGLE_CLIENT_SECRET` | not required | required | required secret |
 | `NEXTAUTH_SECRET` | not required | required | required secret |
-| `NEXTAUTH_URL` | not required | `http://localhost:3000` | `https://grocery.shnekendorf.com` |
+| `NEXTAUTH_URL` | not required | `http://localhost:3000` | `https://<app-hostname>` |
 | `MOCK_CURRENT_USER_EMAIL` | optional | ignored | forbidden/ignored |
 
 Generate `NEXTAUTH_SECRET` from at least 32 random bytes. Let NextAuth own its cookie names and defaults rather than overriding advanced cookie options. HTTPS production URLs cause secure cookies; verify `HttpOnly`, `Secure`, and `SameSite=Lax` in the release smoke test.
@@ -366,7 +366,7 @@ Actions:
 - Add a deployment assertion that `APP_ENV=production`, no `--mock-auth` argument is present, and the pod starts in Google mode.
 - Configure Google redirect URIs exactly as:
   - `http://localhost:3000/api/auth/callback/google`
-  - `https://grocery.shnekendorf.com/api/auth/callback/google`
+  - `https://<app-hostname>/api/auth/callback/google`
 
 ## Failure Modes and Required Behavior
 
