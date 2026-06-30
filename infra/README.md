@@ -35,7 +35,6 @@ OCI_DNS_ZONE_NAME
 OCI_DNS_ZONE_COMPARTMENT_OCID
 OCI_APP_HOSTNAME
 OCI_OKE_KUBERNETES_VERSION
-OCI_NODE_IMAGE_OCID
 OCI_NODE_AVAILABILITY_DOMAIN
 OCI_NODE_SSH_PUBLIC_KEY
 OCI_BASTION_CLIENT_CIDR
@@ -48,3 +47,9 @@ OCI_WIF_AUDIENCE
 ```
 
 Store `OCI_WIF_CLIENT_SECRET` as an environment secret. Restrict the `production` environment to the protected deployment branch. `OCI_BASTION_CLIENT_CIDR` must be a valid IPv4 or IPv6 CIDR, and the OKE version must include its leading `v`.
+
+Automatic OKE worker-image discovery calls the tenancy-scoped node-pool options endpoint. Add this read-only statement to the root-compartment policy for the GitHub deployment group:
+
+```text
+Allow group family-grocery-github-deployers to read all-resources in tenancy
+```

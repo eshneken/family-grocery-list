@@ -30,7 +30,6 @@ env:
   TF_VAR_dns_zone_compartment_ocid: ${{ vars.OCI_DNS_ZONE_COMPARTMENT_OCID }}
   TF_VAR_app_hostname: ${{ vars.OCI_APP_HOSTNAME }}
   TF_VAR_oke_kubernetes_version: ${{ vars.OCI_OKE_KUBERNETES_VERSION }}
-  TF_VAR_node_image_ocid: ${{ vars.OCI_NODE_IMAGE_OCID }}
   TF_VAR_node_availability_domain: ${{ vars.OCI_NODE_AVAILABILITY_DOMAIN }}
   TF_VAR_node_ssh_public_key: ${{ vars.OCI_NODE_SSH_PUBLIC_KEY }}
   TF_VAR_bastion_client_cidr: ${{ vars.OCI_BASTION_CLIENT_CIDR }}
@@ -63,7 +62,6 @@ jobs:
             TF_VAR_dns_zone_compartment_ocid
             TF_VAR_app_hostname
             TF_VAR_oke_kubernetes_version
-            TF_VAR_node_image_ocid
             TF_VAR_node_availability_domain
             TF_VAR_node_ssh_public_key
             TF_VAR_bastion_client_cidr
@@ -148,18 +146,34 @@ jobs:
               -input=false
             terraform -chdir=infra/bootstrap apply -auto-approve -input=false
           else
-            terraform -chdir=infra/bootstrap init -backend=false -input=false
-            terraform -chdir=infra/bootstrap apply -auto-approve -input=false
-            terraform -chdir=infra/bootstrap init \
+            bootstrap_dir="${RUNNER_TEMP}/bootstrap-local"
+            cp -R infra/bootstrap "$bootstrap_dir"
+            printf '%s\n' \
+              'terraform {' \
+              '  backend "local" {' \
+              '    path = "terraform.tfstate"' \
+              '  }' \
+              '}' > "$bootstrap_dir/backend.tf"
+            terraform -chdir="$bootstrap_dir" init -input=false
+            terraform -chdir="$bootstrap_dir" apply -auto-approve -input=false
+
+            printf '%s\n' \
+              'terraform {' \
+              '  backend "oci" {}' \
+              '}' > "$bootstrap_dir/backend.tf"
+            terraform -chdir="$bootstrap_dir" init \
               -migrate-state \
               -force-copy \
               -backend-config="$backend_file" \
               -input=false
+            terraform -chdir="$bootstrap_dir" output -raw state_namespace >/dev/null
+            bootstrap_output_dir="$bootstrap_dir"
           fi
 
-          echo "namespace=$(terraform -chdir=infra/bootstrap output -raw state_namespace)" >> "$GITHUB_OUTPUT"
-          echo "vault_id=$(terraform -chdir=infra/bootstrap output -raw vault_id)" >> "$GITHUB_OUTPUT"
-          echo "vault_key_id=$(terraform -chdir=infra/bootstrap output -raw vault_key_id)" >> "$GITHUB_OUTPUT"
+          bootstrap_output_dir="${bootstrap_output_dir:-infra/bootstrap}"
+          echo "namespace=$(terraform -chdir="$bootstrap_output_dir" output -raw state_namespace)" >> "$GITHUB_OUTPUT"
+          echo "vault_id=$(terraform -chdir="$bootstrap_output_dir" output -raw vault_id)" >> "$GITHUB_OUTPUT"
+          echo "vault_key_id=$(terraform -chdir="$bootstrap_output_dir" output -raw vault_key_id)" >> "$GITHUB_OUTPUT"
 
   deploy-production:
     name: Deploy OCI production resources
