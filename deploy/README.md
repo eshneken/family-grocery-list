@@ -37,16 +37,25 @@ The initialization values are GitHub secrets because they may contain personal i
 
 Use a dedicated production OAuth client. Do not reuse the local client or add the production callback to it; separating the clients keeps localhost credentials and production credentials independently rotatable.
 
-1. Open the [Google Cloud console](https://console.cloud.google.com/) and select or create the Google Cloud project that will own the production identity configuration. A dedicated project such as **Family Grocery Production** is recommended.
-2. Open **Google Auth Platform** > **Branding** and configure the consent screen:
+Google Auth Platform settings have two scopes:
+
+- **Branding**, **Audience**, and **Data Access** belong to the Google Cloud project and are shared by every OAuth client in that project.
+- Client IDs, client secrets, authorized origins, and redirect URIs belong to an individual OAuth client.
+
+The local and production clients represent the same application, so they can and normally should share the existing Google Cloud project. Create a second project only when the environments need different branding, audiences, data scopes, owners, or administrative boundaries.
+
+1. Open the [Google Cloud console](https://console.cloud.google.com/) and select the project that already owns the local OAuth client.
+2. Open **Google Auth Platform** > **Branding** and review the shared consent screen:
    - App name: `Family Grocery List`
    - User support email: an address you monitor
-   - Application home page: `https://grocery.shnekendorf.com`
    - Authorized domain: `shnekendorf.com`
    - Developer contact email: an address you monitor
-   - Add privacy-policy and terms-of-service URLs if those pages are published. Do not enter placeholder URLs.
+   - If publishing the app, add the public application home page and the policy URLs Google requires. Do not enter placeholder or login-protected URLs.
+
+   Adding `shnekendorf.com` permits the project's clients to use that domain and its subdomains. It does not remove or invalidate the local client's `localhost` redirect; localhost is a special development exception and is not entered as an authorized domain.
+
 3. Open **Audience** and select **External** for consumer Gmail accounts. If every intended user belongs to the same managed Google Workspace organization, **Internal** is also valid but blocks all accounts outside that organization.
-4. Leave the app in **Testing** while validating the client and add the intended administrator under **Test users**. Testing mode permits only listed users and Google authorizations can expire after seven days. Before normal production use, return to **Audience**, choose **Publish app**, and confirm that the publishing status is **In production**. Follow any verification steps the console requires; the app requests only the standard `openid`, `email`, and `profile` sign-in scopes.
+4. The application requests only the standard `openid`, `email`, and `profile` sign-in scopes. Google exempts this scope set from Testing mode's test-user restriction, warning, and seven-day authorization expiration. For this personal deployment, leaving the shared project in **Testing** is acceptable. Publishing it is optional; if you choose **Publish app**, complete the branding, domain-ownership, and policy-page requirements shown by the console.
 5. Open **Data Access** and confirm the configured scopes are limited to `openid`, the Google account email address, and basic profile information. Do not add Google API scopes that the application does not use.
 6. Open **Clients**, choose **Create client**, and select **Web application**. Name it `Family Grocery List Production`.
 7. Leave **Authorized JavaScript origins** empty. Auth.js performs this OAuth exchange on the server and does not use Google's browser JavaScript client.
@@ -71,7 +80,7 @@ Use a dedicated production OAuth client. Do not reuse the local client or add th
    ```
 
    Never commit the client secret or place it in a GitHub variable. GitHub does not expose an existing secret value, so updating these names safely replaces the prior local-client credentials.
-10. Confirm `INITIAL_ADMIN_EMAIL` in the same GitHub environment is the exact Gmail address that will sign in. It must also be a Google test user until the OAuth app is published.
+10. Confirm `INITIAL_ADMIN_EMAIL` in the same GitHub environment is the exact Gmail address that will sign in. The application's database allowlist remains the authorization boundary even though Google's basic sign-in scopes do not require the account to be listed as an OAuth test user.
 
 Before starting or rerunning a production deployment, verify DNS and TLS reach Caddy rather than a localhost service:
 
@@ -81,7 +90,7 @@ curl --show-error --head https://grocery.shnekendorf.com/
 
 Before the first application deployment, an HTTP `502` with `server: Caddy` is expected because Caddy has no application upstream yet. A DNS error, certificate error, or response from an unrelated server is not expected.
 
-After deployment, open `https://grocery.shnekendorf.com`, select **Sign in with Google**, and complete one login with `INITIAL_ADMIN_EMAIL`. A `redirect_uri_mismatch` response means the URI in step 8 or the deployed client ID does not match. An `access_denied` or testing-user response means the audience or test-user configuration in steps 3 and 4 is incomplete.
+After deployment, open `https://grocery.shnekendorf.com`, select **Sign in with Google**, and complete one login with `INITIAL_ADMIN_EMAIL`. A `redirect_uri_mismatch` response means the URI in step 8 or the deployed client ID does not match. An `org_internal` response means the project is restricted to a Google Workspace organization that does not contain the signing-in account.
 
 Google's [web-server OAuth guide](https://developers.google.com/identity/protocols/oauth2/web-server) documents exact redirect URI matching, and [Manage App Audience](https://support.google.com/cloud/answer/15549945) describes Testing and In production behavior.
 
