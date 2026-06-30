@@ -52,11 +52,6 @@ variable "oke_kubernetes_version" {
   type        = string
 }
 
-variable "node_image_ocid" {
-  description = "Regional OKE ARM worker image OCID compatible with the selected Kubernetes version."
-  type        = string
-}
-
 variable "node_shape" { default = "VM.Standard.A1.Flex" }
 
 variable "node_count" {
