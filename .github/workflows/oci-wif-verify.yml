@@ -19,7 +19,7 @@ jobs:
     environment: production
     timeout-minutes: 10
     env:
-      WIF_DIR: ${{ runner.temp }}/oci-wif
+      WIF_DIR: /tmp/oci-wif-${{ github.run_id }}
 
     steps:
       - name: Validate WIF configuration
