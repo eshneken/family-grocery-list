@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grocery-app
+  namespace: grocery
+  labels:
+    app.kubernetes.io/name: grocery-app
+    app.kubernetes.io/component: application
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: grocery-app
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: grocery-app
+        app.kubernetes.io/component: application
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: grocery-app
+          image: grocery-app-image
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          env:
+            - name: APP_ENV
+              value: production
+            - name: AUTH_MODE
+              value: google
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: database
+                  key: DATABASE_URL
+            - name: GOOGLE_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: grocery-app-config
+                  key: GOOGLE_CLIENT_ID
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: grocery-app-config
+                  key: GOOGLE_CLIENT_SECRET
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: grocery-app-config
+                  key: NEXTAUTH_SECRET
+            - name: NEXTAUTH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: grocery-app-config
+                  key: NEXTAUTH_URL
+          volumeMounts:
+            - name: postgres-ca
+              mountPath: /var/run/postgres-ca
+              readOnly: true
+          startupProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            failureThreshold: 30
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /api/health/live
+              port: http
+            periodSeconds: 20
+            timeoutSeconds: 3
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /api/health/ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 250m
+              memory: 384Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+      volumes:
+        - name: postgres-ca
+          configMap:
+            name: postgres-ca
