@@ -89,12 +89,25 @@ jobs:
               "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OCI_WIF_AUDIENCE}"
           )"
           jq -jer '.value' <<<"$oidc_response" > "$WIF_DIR/github-oidc.jwt"
+          python3 - "$WIF_DIR/github-oidc.jwt" <<'PY'
+          import base64
+          import json
+          import pathlib
+          import sys
+
+          token = pathlib.Path(sys.argv[1]).read_text()
+          segment = token.split('.')[1]
+          segment += '=' * (-len(segment) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(segment))
+          print(json.dumps({key: claims.get(key) for key in ('iss', 'aud', 'sub')}, indent=2))
+          PY
 
           exchange_status="$(
             curl --silent --show-error \
               --output "$WIF_DIR/exchange-response.json" \
               --write-out '%{http_code}' \
               --user "${OCI_WIF_CLIENT_ID}:${OCI_WIF_CLIENT_SECRET}" \
+              --header 'Content-Type: application/x-www-form-urlencoded' \
               --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
               --data-urlencode 'requested_token_type=urn:oci:token-type:oci-upst' \
               --data-urlencode "public_key@${WIF_DIR}/public.pem" \
