@@ -47,6 +47,7 @@ Production authentication federates with Google and authorizes only active house
 - `e2e/` - Playwright browser tests.
 - `prisma/` - Prisma schema, migrations, and seed data.
 - `infra/` - Terraform for OCI bootstrap resources, the production environment, and the OKE cluster foundation.
+- `deploy/` - Kubernetes application, migration, and one-time production-bootstrap resources.
 
 ## Production Infrastructure
 
@@ -70,6 +71,22 @@ The `deploy` operation is idempotent and is also the normal path for later updat
 Destroy is intentionally difficult to trigger. It requires selecting `destroy`, typing `DESTROY`, and approving the protected `production-destroy-approval` environment. A successful destroy permanently removes PostgreSQL data, the Caddy volume/certificate cache, OKE, networking, and the Terraform state bucket.
 
 See [infra/README.md](infra/README.md) for variables, IAM/WIF policy, state handling, detailed update steps, verification, and disaster warnings.
+
+## Application Delivery
+
+Every pushed commit runs the **Application CI and deployment** workflow. Unit tests, linting, type checks, coverage, and browser E2E tests use an ephemeral PostgreSQL service on the GitHub runner; they never connect to production. Coverage HTML and JSON reports are retained as workflow artifacts.
+
+Successful commits on feature branches stop after CI. A successful commit on `master` additionally:
+
+1. Builds and attests `linux/amd64` and `linux/arm64` images in GHCR.
+2. Selects the immutable image digest rather than a mutable tag.
+3. Runs checked-in Prisma migrations from an OKE Job against private PostgreSQL.
+4. On the first release only, creates the household and initial administrator through the idempotent bootstrap Job.
+5. Rolls out the application, waits for database-aware readiness, and tests the public HTTPS endpoint.
+
+Later releases retain production data, skip bootstrap, apply only pending migrations, and deploy the new image. Failed migrations stop before rollout. Failed readiness or smoke tests restore the previous application image; database migrations are never automatically reversed.
+
+See [deploy/README.md](deploy/README.md) for required GitHub secrets, the one-time GHCR visibility step, initialization behavior, and operating procedures.
 
 ## Prerequisites
 

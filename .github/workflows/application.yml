@@ -1,0 +1,253 @@
+name: Application CI and deployment
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: application-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  unit:
+    name: Unit tests and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: family_grocery
+          POSTGRES_USER: grocery
+          POSTGRES_PASSWORD: grocery
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U grocery -d family_grocery"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://grocery:grocery@127.0.0.1:5432/family_grocery?schema=public
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Apply migrations to CI PostgreSQL
+        run: npm run db:migrate:deploy
+      - name: Lint
+        run: npm run lint
+      - name: Type check
+        run: npm run typecheck
+      - name: Run unit tests with coverage
+        run: npm run test:coverage
+      - name: Add coverage summary
+        shell: bash
+        run: |
+          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
+          const summary = require('./coverage/coverage-summary.json').total;
+          console.log('### Test coverage');
+          console.log('| Metric | Coverage |');
+          console.log('| --- | ---: |');
+          for (const metric of ['statements', 'branches', 'functions', 'lines']) {
+            console.log(`| ${metric} | ${summary[metric].pct}% |`);
+          }
+          NODE
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: coverage-${{ github.sha }}
+          path: coverage/
+          if-no-files-found: warn
+          retention-days: 30
+
+  e2e:
+    name: Browser E2E tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: family_grocery
+          POSTGRES_USER: grocery
+          POSTGRES_PASSWORD: grocery
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U grocery -d family_grocery"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://grocery:grocery@127.0.0.1:5432/family_grocery?schema=public
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Generate Prisma client
+        run: npm run db:generate
+      - name: Apply migrations to CI PostgreSQL
+        run: npm run db:migrate:deploy
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium webkit
+      - name: Run mock-auth browser journeys
+        run: npm run e2e
+      - name: Run production Google-auth shell journey
+        run: npm run e2e:google-shell
+      - name: Upload Playwright diagnostics
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: playwright-${{ github.sha }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  container:
+    name: Build and publish release image
+    if: github.ref == 'refs/heads/master'
+    needs:
+      - unit
+      - e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    outputs:
+      image_reference: ${{ steps.image.outputs.reference }}
+    env:
+      IMAGE_NAME: ghcr.io/${{ github.repository }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push immutable image
+        id: build
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          sbom: true
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-name: ${{ env.IMAGE_NAME }}
+          subject-digest: ${{ steps.build.outputs.digest }}
+          push-to-registry: true
+      - name: Record immutable image reference
+        id: image
+        shell: bash
+        run: echo "reference=${IMAGE_NAME}@${{ steps.build.outputs.digest }}" >> "$GITHUB_OUTPUT"
+      - name: Verify anonymous GHCR pull access
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io >/dev/null
+          if ! docker buildx imagetools inspect "${IMAGE_NAME}@${{ steps.build.outputs.digest }}" >/dev/null; then
+            echo 'The GHCR package is private. Make it public in GitHub Packages, then rerun this workflow.' >&2
+            exit 1
+          fi
+
+  deploy:
+    name: Migrate and deploy production
+    if: github.ref == 'refs/heads/master'
+    needs: container
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      IMAGE_REFERENCE: ${{ needs.container.outputs.image_reference }}
+      RELEASE_ID: ${{ github.sha }}
+      APP_HOSTNAME: ${{ vars.OCI_APP_HOSTNAME }}
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      INITIAL_ADMIN_EMAIL: ${{ secrets.INITIAL_ADMIN_EMAIL }}
+      INITIAL_HOUSEHOLD_NAME: ${{ secrets.INITIAL_HOUSEHOLD_NAME }}
+      OCI_COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
+      OCI_REGION: ${{ vars.OCI_REGION }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/setup-oci-wif
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Create WIF-aware OKE kubeconfig
+        shell: bash
+        run: |
+          set -euo pipefail
+          cluster_id="$(
+            oci ce cluster list \
+              --compartment-id "$OCI_COMPARTMENT_OCID" \
+              --name family-grocery-oke \
+              --lifecycle-state ACTIVE \
+              --query 'data[0].id' \
+              --raw-output
+          )"
+          if [[ -z "$cluster_id" || "$cluster_id" == null ]]; then
+            echo 'No active family-grocery-oke cluster was found.' >&2
+            exit 1
+          fi
+          kubeconfig_path="${RUNNER_TEMP}/oke-kubeconfig"
+          oci ce cluster create-kubeconfig \
+            --cluster-id "$cluster_id" \
+            --file "$kubeconfig_path" \
+            --region "$OCI_REGION" \
+            --token-version 2.0.0 \
+            --kube-endpoint PUBLIC_ENDPOINT \
+            --with-auth-context \
+            --auth security_token \
+            --profile DEFAULT
+          echo "KUBECONFIG=${kubeconfig_path}" >> "$GITHUB_ENV"
+      - name: Run migration, initialization, and rollout
+        run: ./scripts/deploy-application.sh
+      - name: Record release summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '### Production application deployed'
+            echo '- Image: `${{ needs.container.outputs.image_reference }}`'
+            echo '- Migrations: applied in OKE before rollout'
+            echo '- Readiness: passed through public HTTPS endpoint'
+          } >> "$GITHUB_STEP_SUMMARY"
