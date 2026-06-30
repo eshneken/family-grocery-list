@@ -1,0 +1,10 @@
+tenancy_ocid      = "ocid1.tenancy.oc1..replace-me"
+compartment_ocid  = "ocid1.compartment.oc1..replace-me"
+region            = "replace-with-oci-region"
+app_hostname      = "replace-with-app-hostname"
+state_bucket_name = "replace-with-state-bucket-name"
+state_namespace   = "replace-me"
+caddy_acme_email  = "replace-with-your-email@example.com"
+
+# Created after applying the production root. Do not commit this file.
+kubeconfig_path = "/absolute/path/to/family-grocery-kubeconfig"

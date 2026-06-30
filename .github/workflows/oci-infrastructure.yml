@@ -1,0 +1,457 @@
+name: OCI infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Terraform operation to run across all infrastructure stages.
+        required: true
+        type: choice
+        options:
+          - deploy
+          - destroy
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: oci-production-infrastructure
+  cancel-in-progress: false
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_INPUT: false
+  TF_VAR_tenancy_ocid: ${{ vars.OCI_TENANCY_OCID }}
+  TF_VAR_compartment_ocid: ${{ vars.OCI_COMPARTMENT_OCID }}
+  TF_VAR_region: ${{ vars.OCI_REGION }}
+  TF_VAR_state_bucket_name: ${{ vars.OCI_STATE_BUCKET_NAME }}
+  TF_VAR_dns_zone_name: ${{ vars.OCI_DNS_ZONE_NAME }}
+  TF_VAR_dns_zone_compartment_ocid: ${{ vars.OCI_DNS_ZONE_COMPARTMENT_OCID }}
+  TF_VAR_app_hostname: ${{ vars.OCI_APP_HOSTNAME }}
+  TF_VAR_oke_kubernetes_version: ${{ vars.OCI_OKE_KUBERNETES_VERSION }}
+  TF_VAR_node_availability_domain: ${{ vars.OCI_NODE_AVAILABILITY_DOMAIN }}
+  TF_VAR_node_ssh_public_key: ${{ vars.OCI_NODE_SSH_PUBLIC_KEY }}
+  TF_VAR_bastion_client_cidr: ${{ vars.OCI_BASTION_CLIENT_CIDR }}
+  TF_VAR_postgres_backup_start: ${{ vars.OCI_POSTGRES_BACKUP_START }}
+  TF_VAR_caddy_acme_email: ${{ vars.CADDY_ACME_EMAIL }}
+
+jobs:
+  validate:
+    name: Validate production configuration
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 5
+    steps:
+      - name: Validate environment values
+        env:
+          OCI_WIF_DOMAIN_URL: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          OCI_WIF_CLIENT_ID: ${{ vars.OCI_WIF_CLIENT_ID }}
+          OCI_WIF_CLIENT_SECRET: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          OCI_WIF_AUDIENCE: ${{ vars.OCI_WIF_AUDIENCE }}
+          OCI_WIF_SERVICE_USER_OCID: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          required=(
+            TF_VAR_tenancy_ocid
+            TF_VAR_compartment_ocid
+            TF_VAR_region
+            TF_VAR_state_bucket_name
+            TF_VAR_dns_zone_name
+            TF_VAR_dns_zone_compartment_ocid
+            TF_VAR_app_hostname
+            TF_VAR_oke_kubernetes_version
+            TF_VAR_node_availability_domain
+            TF_VAR_node_ssh_public_key
+            TF_VAR_bastion_client_cidr
+            TF_VAR_postgres_backup_start
+            TF_VAR_caddy_acme_email
+            OCI_WIF_DOMAIN_URL
+            OCI_WIF_CLIENT_ID
+            OCI_WIF_CLIENT_SECRET
+            OCI_WIF_AUDIENCE
+            OCI_WIF_SERVICE_USER_OCID
+          )
+          for name in "${required[@]}"; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "Missing production environment value: ${name}" >&2
+              exit 1
+            fi
+          done
+
+          [[ "$TF_VAR_oke_kubernetes_version" == v* ]] || {
+            echo 'OCI_OKE_KUBERNETES_VERSION must start with v.' >&2
+            exit 1
+          }
+          [[ "$TF_VAR_bastion_client_cidr" == */32 || "$TF_VAR_bastion_client_cidr" == */128 ]] || {
+            echo 'OCI_BASTION_CLIENT_CIDR must be an IPv4 /32 or IPv6 /128.' >&2
+            exit 1
+          }
+
+  deploy-bootstrap:
+    name: Deploy bootstrap
+    if: inputs.operation == 'deploy'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 30
+    outputs:
+      namespace: ${{ steps.apply.outputs.namespace }}
+      vault_id: ${{ steps.apply.outputs.vault_id }}
+      vault_key_id: ${{ steps.apply.outputs.vault_key_id }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+      - uses: ./.github/actions/setup-oci-wif
+        id: oci
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Apply bootstrap
+        id: apply
+        env:
+          STATE_NAMESPACE: ${{ steps.oci.outputs.namespace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/bootstrap-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${STATE_NAMESPACE}"
+          key = "bootstrap/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+
+          if oci os bucket get \
+            --namespace-name "$STATE_NAMESPACE" \
+            --bucket-name "$TF_VAR_state_bucket_name" >/dev/null 2>&1; then
+            terraform -chdir=infra/bootstrap init \
+              -backend-config="$backend_file" \
+              -input=false
+            terraform -chdir=infra/bootstrap apply -auto-approve -input=false
+          else
+            terraform -chdir=infra/bootstrap init -backend=false -input=false
+            terraform -chdir=infra/bootstrap apply -auto-approve -input=false
+            terraform -chdir=infra/bootstrap init \
+              -migrate-state \
+              -force-copy \
+              -backend-config="$backend_file" \
+              -input=false
+          fi
+
+          echo "namespace=$(terraform -chdir=infra/bootstrap output -raw state_namespace)" >> "$GITHUB_OUTPUT"
+          echo "vault_id=$(terraform -chdir=infra/bootstrap output -raw vault_id)" >> "$GITHUB_OUTPUT"
+          echo "vault_key_id=$(terraform -chdir=infra/bootstrap output -raw vault_key_id)" >> "$GITHUB_OUTPUT"
+
+  deploy-production:
+    name: Deploy OCI production resources
+    if: inputs.operation == 'deploy'
+    needs: deploy-bootstrap
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    outputs:
+      cluster_id: ${{ steps.apply.outputs.cluster_id }}
+    env:
+      TF_VAR_state_namespace: ${{ needs.deploy-bootstrap.outputs.namespace }}
+      TF_VAR_vault_id: ${{ needs.deploy-bootstrap.outputs.vault_id }}
+      TF_VAR_vault_key_id: ${{ needs.deploy-bootstrap.outputs.vault_key_id }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+      - uses: ./.github/actions/setup-oci-wif
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Apply production resources
+        id: apply
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/production-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "production/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/production init -backend-config="$backend_file" -input=false
+          terraform -chdir=infra/production apply -auto-approve -input=false
+          echo "cluster_id=$(terraform -chdir=infra/production output -raw cluster_id)" >> "$GITHUB_OUTPUT"
+
+  deploy-cluster-foundation:
+    name: Deploy cluster foundation
+    if: inputs.operation == 'deploy'
+    needs: [deploy-bootstrap, deploy-production]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    env:
+      TF_VAR_state_namespace: ${{ needs.deploy-bootstrap.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+      - uses: ./.github/actions/setup-oci-wif
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Create WIF-aware OKE kubeconfig
+        shell: bash
+        run: |
+          set -euo pipefail
+          kubeconfig_path="${RUNNER_TEMP}/oke-kubeconfig"
+          oci ce cluster create-kubeconfig \
+            --cluster-id '${{ needs.deploy-production.outputs.cluster_id }}' \
+            --file "$kubeconfig_path" \
+            --region "$TF_VAR_region" \
+            --token-version 2.0.0 \
+            --kube-endpoint PUBLIC_ENDPOINT \
+            --with-auth-context \
+            --auth security_token \
+            --profile DEFAULT
+          echo "TF_VAR_kubeconfig_path=${kubeconfig_path}" >> "$GITHUB_ENV"
+      - name: Apply cluster foundation
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/cluster-foundation-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "cluster-foundation/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/cluster-foundation init -backend-config="$backend_file" -input=false
+          terraform -chdir=infra/cluster-foundation apply -auto-approve -input=false
+
+  destroy-cluster-foundation:
+    name: Destroy cluster foundation
+    if: inputs.operation == 'destroy'
+    needs: validate
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 60
+    outputs:
+      namespace: ${{ steps.state.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+      - uses: ./.github/actions/setup-oci-wif
+        id: oci
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Read production state
+        id: state
+        env:
+          TF_VAR_state_namespace: ${{ steps.oci.outputs.namespace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/production-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "production/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/production init -backend-config="$backend_file" -input=false
+          echo "namespace=${TF_VAR_state_namespace}" >> "$GITHUB_OUTPUT"
+          echo "cluster_id=$(terraform -chdir=infra/production output -raw cluster_id)" >> "$RUNNER_TEMP/production-outputs"
+      - name: Create WIF-aware OKE kubeconfig
+        shell: bash
+        run: |
+          set -euo pipefail
+          source "$RUNNER_TEMP/production-outputs"
+          kubeconfig_path="${RUNNER_TEMP}/oke-kubeconfig"
+          oci ce cluster create-kubeconfig \
+            --cluster-id "$cluster_id" \
+            --file "$kubeconfig_path" \
+            --region "$TF_VAR_region" \
+            --token-version 2.0.0 \
+            --kube-endpoint PUBLIC_ENDPOINT \
+            --with-auth-context \
+            --auth security_token \
+            --profile DEFAULT
+          echo "TF_VAR_kubeconfig_path=${kubeconfig_path}" >> "$GITHUB_ENV"
+      - name: Destroy cluster foundation
+        env:
+          TF_VAR_state_namespace: ${{ steps.oci.outputs.namespace }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/cluster-foundation-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "cluster-foundation/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/cluster-foundation init -backend-config="$backend_file" -input=false
+          terraform -chdir=infra/cluster-foundation destroy -auto-approve -input=false
+
+  destroy-production:
+    name: Destroy OCI production resources
+    if: inputs.operation == 'destroy'
+    needs: destroy-cluster-foundation
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 120
+    env:
+      TF_VAR_state_namespace: ${{ needs.destroy-cluster-foundation.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+      - uses: ./.github/actions/setup-oci-wif
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Read bootstrap outputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/bootstrap-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "bootstrap/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/bootstrap init -backend-config="$backend_file" -input=false
+          {
+            echo "TF_VAR_vault_id=$(terraform -chdir=infra/bootstrap output -raw vault_id)"
+            echo "TF_VAR_vault_key_id=$(terraform -chdir=infra/bootstrap output -raw vault_key_id)"
+          } >> "$GITHUB_ENV"
+      - name: Destroy production resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_file="${RUNNER_TEMP}/production-backend.hcl"
+          cat > "$backend_file" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "production/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/production init -backend-config="$backend_file" -input=false
+          terraform -chdir=infra/production destroy -auto-approve -input=false
+
+  destroy-bootstrap:
+    name: Destroy bootstrap
+    if: inputs.operation == 'destroy'
+    needs: [destroy-cluster-foundation, destroy-production]
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 45
+    env:
+      TF_VAR_state_namespace: ${{ needs.destroy-cluster-foundation.outputs.namespace }}
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: 1.15.5
+          terraform_wrapper: false
+      - uses: ./.github/actions/setup-oci-wif
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Localize bootstrap state
+        shell: bash
+        run: |
+          set -euo pipefail
+          remote_backend="${RUNNER_TEMP}/bootstrap-backend.hcl"
+          cat > "$remote_backend" <<EOF
+          bucket = "${TF_VAR_state_bucket_name}"
+          namespace = "${TF_VAR_state_namespace}"
+          key = "bootstrap/terraform.tfstate"
+          region = "${TF_VAR_region}"
+          auth = "SecurityToken"
+          config_file_profile = "DEFAULT"
+          EOF
+          terraform -chdir=infra/bootstrap init -backend-config="$remote_backend" -input=false
+          terraform -chdir=infra/bootstrap state pull > "$RUNNER_TEMP/bootstrap.tfstate"
+
+          cp -R infra/bootstrap "$RUNNER_TEMP/bootstrap-local"
+          cat > "$RUNNER_TEMP/bootstrap-local/backend.tf" <<EOF
+          terraform {
+            backend "local" {
+              path = "terraform.tfstate"
+            }
+          }
+          EOF
+          rm -rf "$RUNNER_TEMP/bootstrap-local/.terraform"
+          terraform -chdir="$RUNNER_TEMP/bootstrap-local" init -input=false
+          terraform -chdir="$RUNNER_TEMP/bootstrap-local" state push -force "$RUNNER_TEMP/bootstrap.tfstate"
+      - name: Empty versioned state bucket
+        shell: bash
+        run: |
+          set -euo pipefail
+          oci os object bulk-delete-versions \
+            --namespace-name "$TF_VAR_state_namespace" \
+            --bucket-name "$TF_VAR_state_bucket_name" \
+            --force
+      - name: Destroy bootstrap resources from local state
+        shell: bash
+        run: |
+          set -euo pipefail
+          terraform -chdir="$RUNNER_TEMP/bootstrap-local" destroy -auto-approve -input=false

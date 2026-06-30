@@ -1,0 +1,134 @@
+name: Set up OCI workload identity
+description: Exchange a GitHub OIDC token for an ephemeral OCI security token.
+
+inputs:
+  domain-url:
+    description: OCI identity domain URL.
+    required: true
+  client-id:
+    description: OAuth client ID for the non-privileged WIF application.
+    required: true
+  client-secret:
+    description: OAuth client secret for the non-privileged WIF application.
+    required: true
+  audience:
+    description: Audience configured on the OCI identity propagation trust.
+    required: true
+  service-user-ocid:
+    description: OCI service user mapped by the identity propagation trust.
+    required: true
+  tenancy-ocid:
+    description: OCI tenancy OCID.
+    required: true
+  region:
+    description: OCI region.
+    required: true
+
+outputs:
+  namespace:
+    description: Object Storage namespace returned by the authenticated tenancy.
+    value: ${{ steps.exchange.outputs.namespace }}
+
+runs:
+  using: composite
+  steps:
+    - id: exchange
+      name: Exchange GitHub OIDC token
+      shell: bash
+      env:
+        OCI_WIF_DOMAIN_URL: ${{ inputs.domain-url }}
+        OCI_WIF_CLIENT_ID: ${{ inputs.client-id }}
+        OCI_WIF_CLIENT_SECRET: ${{ inputs.client-secret }}
+        OCI_WIF_AUDIENCE: ${{ inputs.audience }}
+        OCI_WIF_SERVICE_USER_OCID: ${{ inputs.service-user-ocid }}
+        OCI_TENANCY_OCID: ${{ inputs.tenancy-ocid }}
+        OCI_REGION: ${{ inputs.region }}
+      run: |
+        set -euo pipefail
+
+        required=(
+          OCI_WIF_DOMAIN_URL
+          OCI_WIF_CLIENT_ID
+          OCI_WIF_CLIENT_SECRET
+          OCI_WIF_AUDIENCE
+          OCI_WIF_SERVICE_USER_OCID
+          OCI_TENANCY_OCID
+          OCI_REGION
+        )
+        for name in "${required[@]}"; do
+          if [[ -z "${!name:-}" ]]; then
+            echo "Missing OCI WIF value: ${name}" >&2
+            exit 1
+          fi
+        done
+
+        python3 -m pip install --disable-pip-version-check --quiet "oci-cli==3.89.0"
+
+        wif_dir="${RUNNER_TEMP}/oci-wif-${GITHUB_JOB}-${GITHUB_RUN_ATTEMPT}"
+        umask 077
+        mkdir -p "$wif_dir"
+
+        openssl genpkey \
+          -algorithm RSA \
+          -pkeyopt rsa_keygen_bits:2048 \
+          -out "$wif_dir/private.pem" 2>/dev/null
+        openssl pkey \
+          -in "$wif_dir/private.pem" \
+          -pubout \
+          -outform DER | openssl base64 -A > "$wif_dir/public-key.b64"
+
+        oidc_response="$(
+          curl --fail-with-body --silent --show-error \
+            -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=${OCI_WIF_AUDIENCE}"
+        )"
+        jq -jer '.value' <<<"$oidc_response" > "$wif_dir/github-oidc.jwt"
+
+        exchange_status="$(
+          curl --silent --show-error \
+            --output "$wif_dir/exchange-response.json" \
+            --write-out '%{http_code}' \
+            --user "${OCI_WIF_CLIENT_ID}:${OCI_WIF_CLIENT_SECRET}" \
+            --header 'Content-Type: application/x-www-form-urlencoded' \
+            --data-urlencode 'grant_type=urn:ietf:params:oauth:grant-type:token-exchange' \
+            --data-urlencode 'requested_token_type=urn:oci:token-type:oci-upst' \
+            --data-urlencode "public_key@${wif_dir}/public-key.b64" \
+            --data-urlencode "subject_token@${wif_dir}/github-oidc.jwt" \
+            --data-urlencode 'subject_token_type=jwt' \
+            "${OCI_WIF_DOMAIN_URL%/}/oauth2/v1/token"
+        )"
+        if [[ "$exchange_status" != 2* ]]; then
+          echo "OCI token exchange failed with HTTP ${exchange_status}." >&2
+          jq '{error, error_description, code, message}' \
+            "$wif_dir/exchange-response.json" >&2
+          exit 1
+        fi
+        jq -jer '.token' "$wif_dir/exchange-response.json" > "$wif_dir/security-token"
+
+        {
+          echo '[DEFAULT]'
+          echo "user=${OCI_WIF_SERVICE_USER_OCID}"
+          echo "tenancy=${OCI_TENANCY_OCID}"
+          echo "region=${OCI_REGION}"
+          echo "key_file=${wif_dir}/private.pem"
+          echo "security_token_file=${wif_dir}/security-token"
+        } > "$wif_dir/config"
+
+        namespace="$(
+          oci os ns get \
+            --auth security_token \
+            --config-file "$wif_dir/config" \
+            --profile DEFAULT \
+            --query data \
+            --raw-output
+        )"
+        test -n "$namespace"
+
+        {
+          echo "OCI_CONFIG_FILE=${wif_dir}/config"
+          echo 'OCI_CLI_PROFILE=DEFAULT'
+          echo 'OCI_CLI_AUTH=security_token'
+          echo 'TF_VAR_oci_auth=SecurityToken'
+        } >> "$GITHUB_ENV"
+        echo "namespace=${namespace}" >> "$GITHUB_OUTPUT"
+        echo 'OCI workload identity established.'
