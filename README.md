@@ -46,6 +46,30 @@ Production authentication federates with Google and authorizes only active house
 - `src/test/` - Test factories and fixtures.
 - `e2e/` - Playwright browser tests.
 - `prisma/` - Prisma schema, migrations, and seed data.
+- `infra/` - Terraform for OCI bootstrap resources, the production environment, and the OKE cluster foundation.
+
+## Production Infrastructure
+
+Production runs in OCI and is managed by the manual **OCI infrastructure** GitHub Actions workflow. Terraform is split into three ordered roots:
+
+1. `infra/bootstrap` creates the versioned Object Storage state bucket plus the Vault and software key used for application secrets.
+2. `infra/production` creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, DNS, and the reserved public IP.
+3. `infra/cluster-foundation` creates the Kubernetes namespace, database connection material, Caddy, its persistent certificate volume, and the public OCI load balancer.
+
+To add or update OCI infrastructure:
+
+1. Change the appropriate Terraform root on a branch.
+2. Run `terraform fmt -check` and `terraform validate` locally for every affected root.
+3. Open and review a pull request. Terraform changes do not deploy from pull requests.
+4. Merge to `master`.
+5. In GitHub Actions, run **OCI infrastructure** with operation `deploy`.
+6. Review all three jobs. The workflow always applies the roots in dependency order and passes bootstrap/OKE outputs between them.
+
+The `deploy` operation is idempotent and is also the normal path for later updates, such as adding an OCI service. Do not use `destroy` to roll out changes or recover from an apply failure; fix the configuration and rerun `deploy`.
+
+Destroy is intentionally difficult to trigger. It requires selecting `destroy`, typing `DESTROY`, and approving the protected `production-destroy-approval` environment. A successful destroy permanently removes PostgreSQL data, the Caddy volume/certificate cache, OKE, networking, and the Terraform state bucket.
+
+See [infra/README.md](infra/README.md) for variables, IAM/WIF policy, state handling, detailed update steps, verification, and disaster warnings.
 
 ## Prerequisites
 
