@@ -86,14 +86,12 @@ variable "node_availability_domain" {
 variable "node_ssh_public_key" { type = string }
 
 variable "bastion_client_cidr" {
-  description = "Administrator public host CIDR allowed to create Bastion sessions, for example 203.0.113.14/32."
+  description = "Client CIDR allowed to create Bastion sessions, for example 203.0.113.0/24."
   type        = string
 
   validation {
-    condition = can(cidrhost(var.bastion_client_cidr, 0)) && (
-      endswith(var.bastion_client_cidr, "/32") || endswith(var.bastion_client_cidr, "/128")
-    )
-    error_message = "bastion_client_cidr must be a single-host IPv4 /32 or IPv6 /128 CIDR."
+    condition     = can(cidrhost(var.bastion_client_cidr, 0))
+    error_message = "bastion_client_cidr must be a valid IPv4 or IPv6 CIDR."
   }
 }
 

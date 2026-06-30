@@ -47,4 +47,4 @@ OCI_WIF_SERVICE_USER_OCID
 OCI_WIF_AUDIENCE
 ```
 
-Store `OCI_WIF_CLIENT_SECRET` as an environment secret. Restrict the `production` environment to the protected deployment branch. `OCI_BASTION_CLIENT_CIDR` must be a single public IPv4 `/32` or IPv6 `/128`, and the OKE version must include its leading `v`.
+Store `OCI_WIF_CLIENT_SECRET` as an environment secret. Restrict the `production` environment to the protected deployment branch. `OCI_BASTION_CLIENT_CIDR` must be a valid IPv4 or IPv6 CIDR, and the OKE version must include its leading `v`.
