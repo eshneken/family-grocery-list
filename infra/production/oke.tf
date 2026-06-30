@@ -1,9 +1,3 @@
-data "oci_containerengine_node_pool_option" "a1" {
-  node_pool_option_id   = "all"
-  node_pool_k8s_version = var.oke_kubernetes_version
-  node_pool_os_arch     = "aarch64"
-}
-
 resource "oci_containerengine_cluster" "grocery" {
   compartment_id     = var.compartment_ocid
   name               = "family-grocery-oke"
@@ -50,7 +44,7 @@ resource "oci_containerengine_node_pool" "grocery" {
   }
 
   node_source_details {
-    image_id                = data.oci_containerengine_node_pool_option.a1.sources[0].image_id
+    image_id                = var.node_image_ocid
     source_type             = "IMAGE"
     boot_volume_size_in_gbs = var.node_boot_volume_gb
   }
