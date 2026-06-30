@@ -31,6 +31,179 @@ The application image, Prisma migrations, and application Deployment/Service are
 
 See [bootstrap/README.md](bootstrap/README.md) for the state-backend bootstrap, [production/README.md](production/README.md) for OCI resources, and [cluster-foundation/README.md](cluster-foundation/README.md) for Kubernetes resources.
 
+## One-Time WIF Bootstrap
+
+GitHub Actions authenticates without a stored OCI API key. A workflow requests a short-lived GitHub OIDC token, the default OCI identity domain validates it through an identity propagation trust, and OCI returns a short-lived UPST security token for a dedicated service user.
+
+This setup has a one-time manual bootstrap boundary. Creating the trust requires an identity-domain administrator token, but routine workflows must use a separate, non-privileged OAuth client. Do not put the administrator client credentials in GitHub.
+
+### 1. Create The OCI Deployment Identity
+
+In **Identity & Security** > **Domains** > **Default domain**:
+
+1. Create a user for GitHub Terraform deployments. This is a non-human service user; it does not need console access.
+2. Create the group `family-grocery-github-deployers` and add the service user to it.
+3. Record both the user's OCI user OCID and its identity-domain user ID. The ID is the final component of the user's identity-domain URL. It can also be queried with a locally authenticated OCI CLI:
+
+```bash
+export DOMAIN_URL='https://<default-domain-url>'
+export WIF_SERVICE_USER_OCID='ocid1.user.oc1..<service-user-ocid>'
+
+export SERVICE_USER_ID="$(
+  oci identity-domains users list \
+    --endpoint "$DOMAIN_URL" \
+    --filter "ocid eq \"$WIF_SERVICE_USER_OCID\"" \
+    --query 'data.resources[0].id' \
+    --raw-output
+)"
+test -n "$SERVICE_USER_ID" && test "$SERVICE_USER_ID" != null
+```
+
+Create the deployment policy in the root compartment. Replace `hm` if the application compartment has a different name:
+
+```text
+Allow group family-grocery-github-deployers to manage all-resources in compartment hm
+Allow group family-grocery-github-deployers to manage dns in tenancy
+Allow group family-grocery-github-deployers to read all-resources in tenancy
+```
+
+The tenancy-wide permissions support the existing root-compartment DNS zone and discovery APIs such as OKE worker images. Resource creation remains limited to the application compartment.
+
+### 2. Create The Runtime OAuth Client
+
+In the default domain, open **Integrated applications** and create a **Confidential Application** named `family-grocery-github-actions`:
+
+1. Select **Configure this application as a client now**.
+2. Enable the **Client credentials** grant.
+3. Leave **Add app roles** disabled. This runtime client must not have Identity Domain Administrator or other administrative roles.
+4. Finish and activate the application.
+5. Record its client ID and client secret. The secret will be stored only in the GitHub `production` environment.
+
+This is the non-privileged client referenced by `OCI_WIF_CLIENT_ID` and `OCI_WIF_CLIENT_SECRET`.
+
+### 3. Create A Temporary Administrator Client
+
+Create a second confidential application named `family-grocery-wif-bootstrap-admin`:
+
+1. Configure it as a client and enable **Client credentials**.
+2. Enable **Add app roles**, select **Identity Domain Administrator** and **Me**, and finish the application.
+3. Activate it and record its client ID and secret.
+
+This client exists only to call the identity-domain administration API and create the trust. It is not the client used by GitHub Actions.
+
+### 4. Create The GitHub Identity Propagation Trust
+
+Install `curl` and `jq`, then export the values below. `WIF_CLIENT_ID` is the runtime client's ID; `ADMIN_CLIENT_ID` is the temporary administrator client's ID. `SERVICE_USER_ID` is the identity-domain ID, not the OCI user OCID.
+
+```bash
+export DOMAIN_URL='https://<default-domain-url>'
+export ADMIN_CLIENT_ID='<temporary-admin-client-id>'
+read -rsp 'Temporary admin client secret: ' ADMIN_CLIENT_SECRET && echo
+export ADMIN_CLIENT_SECRET
+
+export WIF_CLIENT_ID='<runtime-client-id>'
+export WIF_AUDIENCE='<unique-audience>'
+export WIF_SERVICE_USER_OCID='ocid1.user.oc1..<service-user-ocid>'
+export SERVICE_USER_ID='<identity-domain-service-user-id>'
+export GITHUB_SUBJECT='repo:<owner>/<repository>:environment:production'
+```
+
+Obtain a temporary identity-domain administrator access token:
+
+```bash
+export IDA_ACCESS_TOKEN="$(
+  curl --fail-with-body --silent --show-error \
+    --user "${ADMIN_CLIENT_ID}:${ADMIN_CLIENT_SECRET}" \
+    --header 'Content-Type: application/x-www-form-urlencoded' \
+    --data-urlencode 'grant_type=client_credentials' \
+    --data-urlencode 'scope=urn:opc:idm:__myscopes__' \
+    "${DOMAIN_URL%/}/oauth2/v1/token" |
+    jq -er '.access_token'
+)"
+```
+
+Create the trust. The subject rule is significant: it accepts only OIDC tokens issued to jobs in this repository that declare the GitHub `production` environment.
+
+```bash
+export TRUST_PAYLOAD="$(
+  jq -n \
+    --arg client_id "$WIF_CLIENT_ID" \
+    --arg audience "$WIF_AUDIENCE" \
+    --arg service_user_id "$SERVICE_USER_ID" \
+    --arg subject "$GITHUB_SUBJECT" \
+    '{
+      schemas: ["urn:ietf:params:scim:schemas:oracle:idcs:IdentityPropagationTrust"],
+      name: "family-grocery-github-actions",
+      type: "JWT",
+      issuer: "https://token.actions.githubusercontent.com",
+      publicKeyEndpoint: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      subjectType: "User",
+      clientClaimName: "aud",
+      clientClaimValues: [$audience],
+      oauthClients: [$client_id],
+      allowImpersonation: true,
+      impersonationServiceUsers: [{
+        rule: ("sub eq " + $subject),
+        value: $service_user_id
+      }],
+      active: true
+    }'
+)"
+
+export TRUST_RESPONSE="$(
+  curl --fail-with-body --silent --show-error \
+    --request POST \
+    --header "Authorization: Bearer ${IDA_ACCESS_TOKEN}" \
+    --header 'Content-Type: application/json' \
+    --data "$TRUST_PAYLOAD" \
+    "${DOMAIN_URL%/}/admin/v1/IdentityPropagationTrusts"
+)"
+
+jq '{id, name, active, issuer, clientClaimName, clientClaimValues, oauthClients}' \
+  <<<"$TRUST_RESPONSE"
+```
+
+The response must contain a non-empty `id`, `active: true`, the GitHub issuer, the selected audience, and the runtime OAuth client ID. Keep the audience stable; changing it requires updating both the trust and GitHub variable.
+
+### 5. Configure And Verify GitHub
+
+Create or update the GitHub `production` environment, restrict it to `master`, and set these WIF-specific values:
+
+| GitHub setting | Source |
+| --- | --- |
+| Variable `OCI_WIF_DOMAIN_URL` | Default identity-domain URL |
+| Variable `OCI_WIF_CLIENT_ID` | Non-privileged runtime application client ID |
+| Secret `OCI_WIF_CLIENT_SECRET` | Non-privileged runtime application client secret |
+| Variable `OCI_WIF_AUDIENCE` | `WIF_AUDIENCE` used in the trust |
+| Variable `OCI_WIF_SERVICE_USER_OCID` | OCI OCID of the deployment service user |
+
+They can be set with the GitHub CLI after `gh auth login`:
+
+```bash
+gh variable set OCI_WIF_DOMAIN_URL --env production --body "$DOMAIN_URL"
+gh variable set OCI_WIF_CLIENT_ID --env production --body "$WIF_CLIENT_ID"
+gh variable set OCI_WIF_AUDIENCE --env production --body "$WIF_AUDIENCE"
+gh variable set OCI_WIF_SERVICE_USER_OCID --env production --body "$WIF_SERVICE_USER_OCID"
+
+read -rsp 'Runtime WIF client secret: ' WIF_CLIENT_SECRET && echo
+printf '%s' "$WIF_CLIENT_SECRET" |
+  gh secret set OCI_WIF_CLIENT_SECRET --env production
+unset WIF_CLIENT_SECRET
+```
+
+Run the read-only verification workflow before running Terraform:
+
+```bash
+gh workflow run oci-wif-verify.yml --ref master
+gh run list --workflow oci-wif-verify.yml --limit 1
+```
+
+The run must report **OCI WIF verification passed** after exchanging the GitHub token and reading the Object Storage namespace. A subject mismatch usually means the workflow does not declare `environment: production`, the repository name differs from `GITHUB_SUBJECT`, or the workflow was run from a branch disallowed by the GitHub environment.
+
+After verification, deactivate or delete `family-grocery-wif-bootstrap-admin` and clear its credentials. Keep the runtime application active and rotate its client secret through OCI and the GitHub environment when required.
+
+Oracle references: [Adding a Confidential Application](https://docs.oracle.com/en-us/iaas/Content/Identity/applications/add-confidential-application.htm), [identity-domain OAuth scopes](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/Scopes.htm), and [JWT-to-UPST token exchange](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/json_web_token_exchange.htm).
+
 ## GitHub Configuration
 
 The manual **OCI infrastructure** workflow accepts one operation:
