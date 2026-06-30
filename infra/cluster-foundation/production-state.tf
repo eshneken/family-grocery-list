@@ -2,11 +2,12 @@ data "terraform_remote_state" "production" {
   backend = "oci"
 
   config = {
-    bucket    = var.state_bucket_name
-    namespace = var.state_namespace
-    key       = var.production_state_key
-    region    = var.region
-    auth      = var.oci_auth
+    bucket              = var.state_bucket_name
+    namespace           = var.state_namespace
+    key                 = var.production_state_key
+    region              = var.region
+    auth                = var.oci_auth
+    config_file_profile = "DEFAULT"
   }
 }
 

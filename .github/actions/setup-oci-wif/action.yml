@@ -113,6 +113,9 @@ runs:
           echo "key_file=${wif_dir}/private.pem"
           echo "security_token_file=${wif_dir}/security-token"
         } > "$wif_dir/config"
+        mkdir -p "$HOME/.oci"
+        cp "$wif_dir/config" "$HOME/.oci/config"
+        chmod 600 "$HOME/.oci/config"
 
         namespace="$(
           oci os ns get \
