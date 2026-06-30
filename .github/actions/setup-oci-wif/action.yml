@@ -76,6 +76,12 @@ runs:
           -in "$wif_dir/private.pem" \
           -pubout \
           -outform DER | openssl base64 -A > "$wif_dir/public-key.b64"
+        fingerprint="$(
+          openssl pkey \
+            -in "$wif_dir/private.pem" \
+            -pubout \
+            -outform DER | openssl dgst -md5 -c | awk '{print $2}'
+        )"
 
         oidc_response="$(
           curl --fail-with-body --silent --show-error \
@@ -110,6 +116,7 @@ runs:
           echo "user=${OCI_WIF_SERVICE_USER_OCID}"
           echo "tenancy=${OCI_TENANCY_OCID}"
           echo "region=${OCI_REGION}"
+          echo "fingerprint=${fingerprint}"
           echo "key_file=${wif_dir}/private.pem"
           echo "security_token_file=${wif_dir}/security-token"
         } > "$wif_dir/config"
