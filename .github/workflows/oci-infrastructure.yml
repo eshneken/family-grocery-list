@@ -86,10 +86,15 @@ jobs:
             echo 'OCI_OKE_KUBERNETES_VERSION must start with v.' >&2
             exit 1
           }
-          [[ "$TF_VAR_bastion_client_cidr" == */32 || "$TF_VAR_bastion_client_cidr" == */128 ]] || {
-            echo 'OCI_BASTION_CLIENT_CIDR must be an IPv4 /32 or IPv6 /128.' >&2
-            exit 1
-          }
+          python3 - "$TF_VAR_bastion_client_cidr" <<'PY'
+          import ipaddress
+          import sys
+
+          try:
+              ipaddress.ip_network(sys.argv[1], strict=False)
+          except ValueError as exc:
+              raise SystemExit(f"OCI_BASTION_CLIENT_CIDR is invalid: {exc}") from exc
+          PY
 
   deploy-bootstrap:
     name: Deploy bootstrap
