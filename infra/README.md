@@ -298,22 +298,49 @@ These steps assume:
 - OCI CLI authentication is active locally and can read the PostgreSQL connection details, Vault secret, and Bastion resources.
 - `infra/production` has already been initialized against its remote backend, so `terraform output` reads current production state.
 - pgAdmin is running in desktop mode on the same Mac that opens the SSH tunnel. For container or server-mode pgAdmin, `127.0.0.1` refers to that container or server instead of the Mac.
-- An OpenSSH key pair is available. The public key is attached to the temporary Bastion session and the matching private key opens the tunnel.
+- OpenSSH is installed locally. The procedure creates a dedicated key pair when one does not already exist.
 - The Mac's current public source address falls within the Terraform-managed `bastion_client_cidr`. If it does not, update `OCI_BASTION_CLIENT_CIDR` through the reviewed Terraform deployment workflow rather than editing the Bastion manually.
 
-#### 1. Load production resource details
+#### 1. Create or reuse the Bastion key pair
 
-Run these commands from the repository root. Change the key paths and local port if needed. Port `5433` avoids colliding with the local Docker PostgreSQL service on `5432`.
+Use a dedicated key pair for this application's Bastion sessions:
 
 ```bash
-export SSH_PRIVATE_KEY="$HOME/.ssh/id_ed25519"
+export SSH_PRIVATE_KEY="$HOME/.ssh/family-grocery-bastion"
 export SSH_PUBLIC_KEY="${SSH_PRIVATE_KEY}.pub"
-export LOCAL_POSTGRES_PORT=5433
-export PGADMIN_CA_FILE="$HOME/.oci/family-grocery-postgres-ca.crt"
+
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+
+if [[ -f "$SSH_PRIVATE_KEY" && -f "$SSH_PUBLIC_KEY" ]]; then
+  echo "Reusing the existing Family Grocery Bastion key pair."
+elif [[ -e "$SSH_PRIVATE_KEY" || -e "$SSH_PUBLIC_KEY" ]]; then
+  echo "The Bastion key pair is incomplete; stop and repair or remove the unmatched file." >&2
+else
+  ssh-keygen \
+    -t ed25519 \
+    -a 100 \
+    -f "$SSH_PRIVATE_KEY" \
+    -C "family-grocery OCI Bastion"
+fi
 
 test -f "$SSH_PRIVATE_KEY"
 test -f "$SSH_PUBLIC_KEY"
 chmod 600 "$SSH_PRIVATE_KEY"
+chmod 644 "$SSH_PUBLIC_KEY"
+ssh-keygen -lf "$SSH_PUBLIC_KEY"
+ssh-add --apple-use-keychain "$SSH_PRIVATE_KEY"
+```
+
+`ssh-keygen` prompts for a passphrase when creating a key. A passphrase is recommended; it is not stored in OCI. `ssh-add` loads the key into the macOS SSH agent and Keychain so the later background tunnel does not need to prompt. If only one key file exists, do not generate over it because that can leave a mismatched pair. Repair or remove the unmatched file first, then rerun this step.
+
+#### 2. Load production resource details
+
+Run these commands from the repository root. Port `5433` avoids colliding with the local Docker PostgreSQL service on `5432`.
+
+```bash
+export LOCAL_POSTGRES_PORT=5433
+export PGADMIN_CA_FILE="$HOME/.oci/family-grocery-postgres-ca.crt"
 
 export BASTION_ID="$(terraform -chdir=infra/production output -raw bastion_id)"
 export DB_SYSTEM_ID="$(terraform -chdir=infra/production output -raw postgres_db_system_id)"
@@ -352,7 +379,7 @@ Confirm the local port is unused. No output means nothing is currently listening
 lsof -nP -iTCP:"$LOCAL_POSTGRES_PORT" -sTCP:LISTEN
 ```
 
-#### 2. Save the OCI PostgreSQL CA certificate
+#### 3. Save the OCI PostgreSQL CA certificate
 
 The CA certificate is not secret, but it must be the certificate returned for the current database system:
 
@@ -365,12 +392,12 @@ oci psql connection-details get \
 chmod 600 "$PGADMIN_CA_FILE"
 ```
 
-#### 3. Create the Bastion port-forwarding session
+#### 4. Create the Bastion port-forwarding session
 
 Create a one-hour session targeting the PostgreSQL primary endpoint:
 
 ```bash
-export BASTION_SESSION_ID="$(
+export BASTION_WORK_REQUEST_ID="$(
   oci bastion session create-port-forwarding \
     --bastion-id "$BASTION_ID" \
     --display-name "pgadmin-$(date -u +%Y%m%dT%H%M%SZ)" \
@@ -384,9 +411,21 @@ export BASTION_SESSION_ID="$(
     --raw-output
 )"
 
+test -n "$BASTION_WORK_REQUEST_ID"
+printf 'Bastion work request: %s\n' "$BASTION_WORK_REQUEST_ID"
+
+export BASTION_SESSION_ID="$(
+  oci bastion work-request get \
+    --work-request-id "$BASTION_WORK_REQUEST_ID" \
+    --query 'data.resources[0].identifier' \
+    --raw-output
+)"
+
 test -n "$BASTION_SESSION_ID"
 printf 'Bastion session: %s\n' "$BASTION_SESSION_ID"
 ```
+
+The create command returns a Bastion **work-request** OCID when a waiter is used. The follow-up query resolves the session OCID from the completed work request; do not pass the work-request OCID to `oci bastion session get`.
 
 OCI supplies the correctly formed SSH command for the session:
 
@@ -397,22 +436,39 @@ oci bastion session get \
   --raw-output
 ```
 
-Copy the returned command, replace `<privateKey>` with the absolute path in `$SSH_PRIVATE_KEY`, and replace `<localPort>` with `$LOCAL_POSTGRES_PORT`. Add `-o ExitOnForwardFailure=yes` before the destination, then run the concrete command in a separate dedicated terminal. A typical command has this shape:
+Extract the session destination from OCI's command, then launch the tunnel in the background from the same shell. This preserves `DB_SECRET_ID`, `BASTION_SESSION_ID`, and the other exported values for the next steps:
 
 ```bash
+export BASTION_SSH_DESTINATION="$(
+  oci bastion session get \
+    --session-id "$BASTION_SESSION_ID" \
+    --query 'data."ssh-metadata".command' \
+    --raw-output | awk '{print $NF}'
+)"
+export BASTION_TUNNEL_LOG="$HOME/.oci/family-grocery-bastion-tunnel.log"
+
 ssh -i "$SSH_PRIVATE_KEY" \
   -N \
   -L "${LOCAL_POSTGRES_PORT}:${DB_PRIVATE_IP}:${DB_PORT}" \
   -p 22 \
   -o ExitOnForwardFailure=yes \
-  "${BASTION_SESSION_ID}@host.bastion.<oci-region>.oci.oraclecloud.com"
+  -o ServerAliveInterval=30 \
+  -o ServerAliveCountMax=3 \
+  -o StrictHostKeyChecking=accept-new \
+  "$BASTION_SSH_DESTINATION" \
+  > "$BASTION_TUNNEL_LOG" 2>&1 &
+export BASTION_TUNNEL_PID=$!
+
+sleep 2
+kill -0 "$BASTION_TUNNEL_PID"
+lsof -nP -iTCP:"$LOCAL_POSTGRES_PORT" -sTCP:LISTEN
 ```
 
-Use the hostname from OCI's returned command in place of `<oci-region>`. Leave this terminal open. The command normally remains quiet and does not return while the tunnel is active.
+The final two commands must show that the SSH process is alive and listening on the selected local port. If either check fails, inspect `$BASTION_TUNNEL_LOG`. The key was loaded into the SSH agent in step 1, and `accept-new` records a first-seen Bastion host key while continuing to reject a changed key.
 
-#### 4. Copy the Vault password without printing it
+#### 5. Copy the Vault password without printing it
 
-Back in the original terminal, which still has the exported variables, copy the current secret version directly to the macOS clipboard:
+In the same shell, copy the current secret version directly to the macOS clipboard:
 
 ```bash
 oci secrets secret-bundle get \
@@ -424,7 +480,7 @@ oci secrets secret-bundle get \
 
 Do not echo the password, store it in shell history, or place it in a file. The clipboard temporarily contains the production administrator password.
 
-#### 5. Register the server in pgAdmin
+#### 6. Register the server in pgAdmin
 
 In pgAdmin, choose **Register** > **Server** and enter:
 
@@ -458,20 +514,25 @@ select ssl, version from pg_stat_ssl where pid = pg_backend_pid();
 
 The second query must return `ssl = true`.
 
-#### 6. Close and delete the session
+#### 7. Close and delete the session
 
 When administration is complete:
 
 1. Disconnect the server in pgAdmin.
-2. Press `Ctrl+C` in the SSH tunnel terminal.
+2. Stop and reap the background SSH process.
 3. Delete the Bastion session rather than waiting for its TTL:
 
 ```bash
+kill "$BASTION_TUNNEL_PID" 2>/dev/null || true
+wait "$BASTION_TUNNEL_PID" 2>/dev/null || true
+
 oci bastion session delete \
   --session-id "$BASTION_SESSION_ID" \
   --force
 
-unset BASTION_SESSION_ID DB_SECRET_ID
+rm -f "$BASTION_TUNNEL_LOG"
+unset BASTION_SESSION_ID BASTION_WORK_REQUEST_ID BASTION_SSH_DESTINATION
+unset BASTION_TUNNEL_PID BASTION_TUNNEL_LOG DB_SECRET_ID
 printf '' | pbcopy
 ```
 
