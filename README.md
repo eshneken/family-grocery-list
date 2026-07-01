@@ -49,6 +49,47 @@ Production authentication federates with Google and authorizes only active house
 - `infra/` - Terraform for OCI bootstrap resources, the production environment, and the OKE cluster foundation.
 - `deploy/` - Kubernetes application, migration, and one-time production-bootstrap resources.
 
+## Development Workflow
+
+All application, infrastructure, and documentation changes use a branch and pull request. Do not commit or push directly to `master`, including from Codex threads.
+
+1. Update local `master`, then create a focused branch. Codex-created branches use the `codex/` prefix:
+
+```bash
+git switch master
+git pull --ff-only
+git switch -c codex/<short-change-name>
+```
+
+2. Make the change and run the checks appropriate to it. Application changes should run the complete local quality suite before opening a pull request:
+
+```bash
+npm ci
+npm run db:generate
+npm run lint
+npm run typecheck
+npm run test:coverage
+npm run e2e
+npm run e2e:google-shell
+```
+
+Terraform changes should additionally run `terraform fmt -check` and `terraform validate` in every affected Terraform root. Documentation-only changes may omit application tests when they cannot affect executable behavior.
+
+3. Commit the focused change, push the branch, and open a pull request targeting `master`:
+
+```bash
+git add <changed-files>
+git commit -m "<type>: <summary>"
+git push -u origin HEAD
+gh pr create --base master --fill
+```
+
+4. Wait for the required **Unit tests and coverage** and **Browser E2E tests** checks. Resolve any review conversations, review the diff, and merge the pull request only after both checks pass. Delete the feature branch after merge.
+
+The unit job runs linting, type checks, migrations, and Vitest with enforced minimum coverage of 93.5% statements, 89.5% branches, 93.5% functions, and 94.5% lines. The browser job runs the mock-auth journeys and production Google-auth shell journey against disposable PostgreSQL. GitHub protects `master`, applies these requirements to administrators, blocks direct pushes and force pushes, and requires changes to arrive through a pull request. A second-person approval is not required because this is currently a single-owner repository.
+
+Every branch push runs CI without production credentials. Merging an application change to `master` reruns the same checks and, only after they pass, builds the release image and deploys production. Infrastructure changes require a separate manual **OCI infrastructure** deployment after merge, as described below.
+
 ## Production Infrastructure
 
 Production runs in OCI and is managed by the manual **OCI infrastructure** GitHub Actions workflow. Terraform is split into three ordered roots:
