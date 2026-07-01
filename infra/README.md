@@ -287,6 +287,198 @@ Before the application Service exists, Caddy returning HTTPS `502` is expected. 
 
 For an idempotence check, refresh local bootstrap outputs in the ignored production `terraform.tfvars`, then run `terraform plan` in all three roots. Each should report no changes.
 
+## Administrative Tasks
+
+### Connect Local pgAdmin To Production PostgreSQL
+
+OCI PostgreSQL has only a private endpoint. Use a short-lived OCI Bastion port-forwarding session for administrative access; never add a public database endpoint or a public PostgreSQL ingress rule.
+
+These steps assume:
+
+- OCI CLI authentication is active locally and can read the PostgreSQL connection details, Vault secret, and Bastion resources.
+- `infra/production` has already been initialized against its remote backend, so `terraform output` reads current production state.
+- pgAdmin is running in desktop mode on the same Mac that opens the SSH tunnel. For container or server-mode pgAdmin, `127.0.0.1` refers to that container or server instead of the Mac.
+- An OpenSSH key pair is available. The public key is attached to the temporary Bastion session and the matching private key opens the tunnel.
+- The Mac's current public source address falls within the Terraform-managed `bastion_client_cidr`. If it does not, update `OCI_BASTION_CLIENT_CIDR` through the reviewed Terraform deployment workflow rather than editing the Bastion manually.
+
+#### 1. Load production resource details
+
+Run these commands from the repository root. Change the key paths and local port if needed. Port `5433` avoids colliding with the local Docker PostgreSQL service on `5432`.
+
+```bash
+export SSH_PRIVATE_KEY="$HOME/.ssh/id_ed25519"
+export SSH_PUBLIC_KEY="${SSH_PRIVATE_KEY}.pub"
+export LOCAL_POSTGRES_PORT=5433
+export PGADMIN_CA_FILE="$HOME/.oci/family-grocery-postgres-ca.crt"
+
+test -f "$SSH_PRIVATE_KEY"
+test -f "$SSH_PUBLIC_KEY"
+chmod 600 "$SSH_PRIVATE_KEY"
+
+export BASTION_ID="$(terraform -chdir=infra/production output -raw bastion_id)"
+export DB_SYSTEM_ID="$(terraform -chdir=infra/production output -raw postgres_db_system_id)"
+export DB_SECRET_ID="$(terraform -chdir=infra/production output -raw postgres_admin_secret_id)"
+export DB_USER="$(terraform -chdir=infra/production output -raw postgres_admin_username)"
+
+export DB_FQDN="$(
+  oci psql connection-details get \
+    --db-system-id "$DB_SYSTEM_ID" \
+    --query 'data."primary-db-endpoint".fqdn' \
+    --raw-output
+)"
+export DB_PRIVATE_IP="$(
+  oci psql connection-details get \
+    --db-system-id "$DB_SYSTEM_ID" \
+    --query 'data."primary-db-endpoint"."ip-address"' \
+    --raw-output
+)"
+export DB_PORT="$(
+  oci psql connection-details get \
+    --db-system-id "$DB_SYSTEM_ID" \
+    --query 'data."primary-db-endpoint".port' \
+    --raw-output
+)"
+
+printf 'Database certificate name: %s\n' "$DB_FQDN"
+printf 'Private tunnel target: %s:%s\n' "$DB_PRIVATE_IP" "$DB_PORT"
+printf 'Database user: %s\n' "$DB_USER"
+```
+
+If the OCI CLI uses a non-default profile, add `--profile <profile-name>` to each `oci` command. Do not print `DB_SECRET_ID` or place any of these values in a committed file.
+
+Confirm the local port is unused. No output means nothing is currently listening:
+
+```bash
+lsof -nP -iTCP:"$LOCAL_POSTGRES_PORT" -sTCP:LISTEN
+```
+
+#### 2. Save the OCI PostgreSQL CA certificate
+
+The CA certificate is not secret, but it must be the certificate returned for the current database system:
+
+```bash
+mkdir -p "$(dirname "$PGADMIN_CA_FILE")"
+oci psql connection-details get \
+  --db-system-id "$DB_SYSTEM_ID" \
+  --query 'data."ca-certificate"' \
+  --raw-output > "$PGADMIN_CA_FILE"
+chmod 600 "$PGADMIN_CA_FILE"
+```
+
+#### 3. Create the Bastion port-forwarding session
+
+Create a one-hour session targeting the PostgreSQL primary endpoint:
+
+```bash
+export BASTION_SESSION_ID="$(
+  oci bastion session create-port-forwarding \
+    --bastion-id "$BASTION_ID" \
+    --display-name "pgadmin-$(date -u +%Y%m%dT%H%M%SZ)" \
+    --key-type PUB \
+    --ssh-public-key-file "$SSH_PUBLIC_KEY" \
+    --target-private-ip "$DB_PRIVATE_IP" \
+    --target-port "$DB_PORT" \
+    --session-ttl 3600 \
+    --wait-for-state SUCCEEDED \
+    --query 'data.id' \
+    --raw-output
+)"
+
+test -n "$BASTION_SESSION_ID"
+printf 'Bastion session: %s\n' "$BASTION_SESSION_ID"
+```
+
+OCI supplies the correctly formed SSH command for the session:
+
+```bash
+oci bastion session get \
+  --session-id "$BASTION_SESSION_ID" \
+  --query 'data."ssh-metadata".command' \
+  --raw-output
+```
+
+Copy the returned command, replace `<privateKey>` with the absolute path in `$SSH_PRIVATE_KEY`, and replace `<localPort>` with `$LOCAL_POSTGRES_PORT`. Add `-o ExitOnForwardFailure=yes` before the destination, then run the concrete command in a separate dedicated terminal. A typical command has this shape:
+
+```bash
+ssh -i "$SSH_PRIVATE_KEY" \
+  -N \
+  -L "${LOCAL_POSTGRES_PORT}:${DB_PRIVATE_IP}:${DB_PORT}" \
+  -p 22 \
+  -o ExitOnForwardFailure=yes \
+  "${BASTION_SESSION_ID}@host.bastion.<oci-region>.oci.oraclecloud.com"
+```
+
+Use the hostname from OCI's returned command in place of `<oci-region>`. Leave this terminal open. The command normally remains quiet and does not return while the tunnel is active.
+
+#### 4. Copy the Vault password without printing it
+
+Back in the original terminal, which still has the exported variables, copy the current secret version directly to the macOS clipboard:
+
+```bash
+oci secrets secret-bundle get \
+  --secret-id "$DB_SECRET_ID" \
+  --stage CURRENT \
+  --query 'data."secret-bundle-content".content' \
+  --raw-output | base64 --decode | pbcopy
+```
+
+Do not echo the password, store it in shell history, or place it in a file. The clipboard temporarily contains the production administrator password.
+
+#### 5. Register the server in pgAdmin
+
+In pgAdmin, choose **Register** > **Server** and enter:
+
+| Tab | Field | Value |
+| --- | --- | --- |
+| General | Name | `Family Grocery Production` |
+| Connection | Host name/address | The value printed for `$DB_FQDN` |
+| Connection | Port | `5433`, or the selected `$LOCAL_POSTGRES_PORT` |
+| Connection | Maintenance database | `postgres` |
+| Connection | Username | The value printed for `$DB_USER` |
+| Connection | Password | Paste the Vault password |
+| Connection | Save password | Off, unless pgAdmin's protected credential storage is intentionally being used |
+| Parameters | Host address | `127.0.0.1` |
+| Parameters | SSL mode | `verify-full` |
+| Parameters | Root certificate | The absolute path in `$PGADMIN_CA_FILE` |
+
+Both hostname fields are intentional. **Host name/address** remains the OCI PostgreSQL FQDN so `verify-full` checks the server certificate name. **Host address** is `127.0.0.1` so the TCP connection enters the local Bastion tunnel. Setting the main hostname to `127.0.0.1` causes certificate-name verification to fail.
+
+After pgAdmin connects, clear the clipboard:
+
+```bash
+printf '' | pbcopy
+```
+
+Optionally verify the authenticated user and TLS session in pgAdmin's Query Tool:
+
+```sql
+select current_user, inet_client_addr(), version();
+select ssl, version from pg_stat_ssl where pid = pg_backend_pid();
+```
+
+The second query must return `ssl = true`.
+
+#### 6. Close and delete the session
+
+When administration is complete:
+
+1. Disconnect the server in pgAdmin.
+2. Press `Ctrl+C` in the SSH tunnel terminal.
+3. Delete the Bastion session rather than waiting for its TTL:
+
+```bash
+oci bastion session delete \
+  --session-id "$BASTION_SESSION_ID" \
+  --force
+
+unset BASTION_SESSION_ID DB_SECRET_ID
+printf '' | pbcopy
+```
+
+If pgAdmin reports connection refused, confirm the SSH process is still running and listening on the selected local port. For certificate errors, confirm the pgAdmin hostname is `$DB_FQDN`, **Host address** is `127.0.0.1`, SSL mode is `verify-full`, and the current CA file is selected.
+
+References: [OCI PostgreSQL private-endpoint connections](https://docs.oracle.com/en-us/iaas/Content/postgresql/connect-to-db.htm), [OCI Bastion port-forwarding sessions](https://docs.oracle.com/en-us/iaas/Content/Bastion/Tasks/create-session-port-forwarding.htm), and [pgAdmin server connection fields](https://www.pgadmin.org/docs/pgadmin4/latest/server_dialog.html).
+
 ## Destroy Protection
 
 Destroy is for deliberate full-environment resets, not routine deployments. It permanently removes:
