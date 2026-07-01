@@ -46,8 +46,28 @@ Production authentication federates with Google and authorizes only active house
 - `src/test/` - Test factories and fixtures.
 - `e2e/` - Playwright browser tests.
 - `prisma/` - Prisma schema, migrations, and seed data.
-- `infra/` - Terraform for OCI bootstrap resources, the production environment, and the OKE cluster foundation.
-- `deploy/` - Kubernetes application, migration, and one-time production-bootstrap resources.
+- [`infra/`](infra/README.md) - Terraform for OCI bootstrap resources, the production environment, and the OKE cluster foundation.
+- [`deploy/`](deploy/README.md) - Kubernetes application, migration, and one-time production-bootstrap resources.
+- `diagrams/` - Mermaid sources plus rendered architecture and data-model diagrams.
+- `docs/screenshots/` - Static application preview imagery used by this README.
+
+## OCI Architecture
+
+![Family Grocery List logical architecture on OCI](diagrams/oci-logical-architecture.png)
+
+The diagram shows the production network and service boundaries, runtime request path, GitHub Actions delivery path, and supporting managed services. Its editable sources are available as [Mermaid](diagrams/oci-logical-architecture.mmd) and [Excalidraw](diagrams/oci-logical-architecture.excalidraw); a vector [SVG](diagrams/oci-logical-architecture.svg) is also included.
+
+## Logical Data Model
+
+![Family Grocery List logical entity-relationship diagram](diagrams/logical-data-model.png)
+
+The diagram follows the production Prisma model and shows entity cardinalities, ownership, optional catalog and store associations, shopping-list lifecycle, item outcomes, and learned corrections. The editable [Mermaid ER source](diagrams/logical-data-model.mmd) and rendered [SVG](diagrams/logical-data-model.svg) are included. Mermaid ER diagrams are not currently convertible to Excalidraw by the offline renderer.
+
+## Application Preview
+
+<p align="center">
+  <img src="docs/screenshots/family-grocery-mobile.png" alt="Family Grocery mobile list experience" width="420">
+</p>
 
 ## Development Workflow
 
@@ -94,9 +114,9 @@ Every non-`master` branch push runs CI without production credentials. GitHub re
 
 Production runs in OCI and is managed by the manual **OCI infrastructure** GitHub Actions workflow. Terraform is split into three ordered roots:
 
-1. `infra/bootstrap` creates the versioned Object Storage state bucket plus the Vault and software key used for application secrets.
-2. `infra/production` creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, DNS, and the reserved public IP.
-3. `infra/cluster-foundation` creates the Kubernetes namespace, database connection material, Caddy, its persistent certificate volume, and the public OCI load balancer.
+1. [`infra/bootstrap`](infra/bootstrap/README.md) creates the versioned Object Storage state bucket plus the Vault and software key used for application secrets.
+2. [`infra/production`](infra/production/README.md) creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, DNS, and the reserved public IP.
+3. [`infra/cluster-foundation`](infra/cluster-foundation/README.md) creates the Kubernetes namespace, database connection material, Caddy, its persistent certificate volume, and the public OCI load balancer.
 
 To add or update OCI infrastructure:
 

@@ -50,3 +50,4 @@ credentials.json
 service-account*.json
 *-service-account.json
 secrets.json
+.gstack/

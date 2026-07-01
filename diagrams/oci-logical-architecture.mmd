@@ -1,0 +1,88 @@
+graph TB
+  subgraph Outside["External actors"]
+    direction LR
+    Browser["Household users<br/>Web browser"]
+    GHA["GitHub Actions<br/>Terraform + app delivery"]
+  end
+
+  subgraph OCI["OCI tenancy - us-ashburn-1"]
+    direction TB
+
+    subgraph Root["Root compartment"]
+      direction LR
+      DNS["OCI DNS<br/>grocery hostname"]
+      IAM["Default identity domain<br/>GitHub OIDC trust"]
+    end
+
+    subgraph AppComp["Application compartment"]
+      direction TB
+
+      subgraph Managed["Managed services"]
+        direction LR
+        State["Object Storage<br/>Versioned Terraform state"]
+        Vault["Vault + software KMS key<br/>PostgreSQL admin secret"]
+        Volume["Block Volume<br/>Caddy ACME state"]
+      end
+
+      subgraph VCN["VCN 10.40.0.0/16"]
+        direction TB
+
+        Gateways["Internet, NAT, and OCI Service gateways<br/>GHCR image pull | Google OAuth | ACME"]
+
+        subgraph Public["Public subnets"]
+          direction LR
+          LB["Flexible Load Balancer<br/>10.40.0.0/24<br/>LB NSG: 80/443"]
+          API["OKE API endpoint<br/>10.40.1.0/28<br/>API NSG: 6443"]
+          Bastion["OCI Bastion<br/>10.40.40.0/28<br/>Client CIDR allowlist"]
+        end
+
+        subgraph Private["Private subnets"]
+          direction LR
+          Worker["OKE managed node<br/>1 x A1.Flex<br/>10.40.10.0/24<br/>Worker NSG"]
+
+          subgraph Pods[" "]
+            direction LR
+            PodSubnet["VCN-native pod subnet<br/>10.40.20.0/22 - Pod NSG"]
+            Caddy["Caddy pod<br/>TLS termination + renewal"]
+            App["Next.js app pod<br/>Migration + bootstrap Jobs"]
+          end
+
+          Postgres["OCI PostgreSQL 16<br/>10.40.30.0/24<br/>Postgres NSG:<br/>pods + Bastion only"]
+        end
+      end
+    end
+  end
+
+  Browser -->|"DNS lookup"| DNS
+  DNS -->|"A record"| LB
+  Browser -->|"HTTPS 443"| LB
+  LB -->|"NodePorts<br/>LB NSG to Worker NSG"| Worker
+  Worker -->|"VCN-native routing"| Caddy
+  Caddy -->|"ClusterIP :3000"| App
+  App -->|"TLS :5432<br/>Pod NSG to Postgres NSG"| Postgres
+  Caddy <-->|"Persistent ACME data"| Volume
+
+  GHA -->|"OIDC"| IAM
+  GHA -->|"Remote state"| State
+  GHA -->|"Secret management"| Vault
+  GHA -->|"Kubernetes deploy :6443"| API
+  API <-->|"OKE control plane"| Worker
+
+  Worker -->|"Image pull"| Gateways
+  Caddy -->|"ACME"| Gateways
+  App -->|"OAuth"| Gateways
+
+  classDef actor fill:#f3f4f6,stroke:#4b5563,color:#111827,stroke-width:1.5px;
+  classDef external fill:#fef3c7,stroke:#b45309,color:#451a03,stroke-width:1.5px;
+  classDef managed fill:#fff1f2,stroke:#c74634,color:#4c0519,stroke-width:1.5px;
+  classDef public fill:#ffedd5,stroke:#ea580c,color:#431407,stroke-width:1.5px;
+  classDef private fill:#e0f2fe,stroke:#0284c7,color:#082f49,stroke-width:1.5px;
+  classDef data fill:#ecfdf5,stroke:#059669,color:#022c22,stroke-width:1.5px;
+  classDef subnetLabel fill:#f8fafc,stroke:#0284c7,color:#082f49,stroke-dasharray:3 3;
+
+  class Browser,GHA actor;
+  class IAM,DNS,State,Vault,Volume,Gateways managed;
+  class LB,API,Bastion public;
+  class Worker,Caddy,App private;
+  class Postgres data;
+  class PodSubnet subnetLabel;

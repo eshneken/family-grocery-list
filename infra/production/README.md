@@ -2,6 +2,8 @@
 
 This root creates the OCI environment only. It does not create Kubernetes application resources. Apply it after the `bootstrap` root has completed and OCI Workload Identity Federation has been manually configured for GitHub Actions.
 
+Documentation: [infrastructure overview](../README.md) | [bootstrap state backend](../bootstrap/README.md) | [project README](../../README.md)
+
 ## Initial local plan
 
 Copy the example variables and fill in the OKE version, tenancy-specific worker availability domain, SSH public key, and outputs from the bootstrap run:
@@ -29,3 +31,5 @@ The `terraform.tfvars` file is ignored. Do not place a PostgreSQL password, GitH
 - `bastion_client_cidr` is required and accepts any valid IPv4 or IPv6 CIDR. Choose the scope deliberately because it controls which clients may create Bastion sessions.
 - `node_availability_domain` is supplied explicitly so CI does not require a tenancy-level Availability Domains lookup. The compatible ARM worker image is discovered from OKE for the selected Kubernetes version.
 - The selected Kubernetes version and PostgreSQL service shape/version must be confirmed in Ashburn immediately before the first plan/apply.
+
+Next: configure the [OKE cluster foundation](../cluster-foundation/README.md).
