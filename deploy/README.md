@@ -1,17 +1,17 @@
 # Application Deployment
 
-The **Application CI and deployment** workflow in `.github/workflows/application.yml` is the delivery path for the Next.js application. Terraform owns OCI and the durable cluster foundation; this workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
+Application delivery is split between `.github/workflows/application-ci.yml` and `.github/workflows/application.yml`. Terraform owns OCI and the durable cluster foundation. The CI workflow validates feature branches, while the production workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
 
 ## Branch And Test Flow
 
-Every push to every branch runs two independent jobs:
+Every push to a non-`master` branch runs two independent jobs:
 
 - **Unit tests and coverage** starts PostgreSQL 16, applies migrations, runs linting and type checks, and enforces the repository's coverage floors.
 - **Browser E2E tests** starts a separate PostgreSQL 16 service, applies migrations, and runs the mock-auth desktop/mobile journeys plus the production Google-auth shell test.
 
 The databases are disposable GitHub service containers. No branch or test job receives OCI credentials or production secrets. Coverage reports are retained for 30 days, and failed Playwright diagnostics are retained for 14 days.
 
-Only a successful `master` commit proceeds to image publication and production deployment. Configure `master` branch protection to require **Unit tests and coverage** and **Browser E2E tests** before merge.
+Protected `master` requires **Unit tests and coverage** and **Browser E2E tests** before merge, requires the branch to be up to date, and applies the restriction to administrators. The production workflow therefore trusts GitHub's recorded pull-request checks instead of running both suites again. A merge to `master` proceeds directly to image publication and production deployment.
 
 ## Production Environment Settings
 
