@@ -131,7 +131,7 @@ See [deploy/README.md](deploy/README.md) for required GitHub secrets, the one-ti
 
 ## Administrative Tasks
 
-Production PostgreSQL has no public endpoint. To inspect or administer it with local pgAdmin, create a time-limited OCI Bastion port-forwarding session, retrieve the administrator password from OCI Vault, and configure pgAdmin for full TLS certificate verification. Follow [Connect Local pgAdmin To Production PostgreSQL](infra/README.md#connect-local-pgadmin-to-production-postgresql) for the complete procedure and cleanup steps.
+Production PostgreSQL has no public endpoint. To inspect or administer it with local pgAdmin, create a time-limited OCI Bastion port-forwarding session, retrieve the administrator password from OCI Vault, and require TLS for the database connection. Follow [Connect Local pgAdmin To Production PostgreSQL](infra/README.md#connect-local-pgadmin-to-production-postgresql) for the complete procedure and cleanup steps.
 
 ## Prerequisites
 
