@@ -88,7 +88,7 @@ gh pr create --base master --fill
 
 The unit job runs linting, type checks, migrations, and Vitest with enforced minimum coverage of 93.5% statements, 89.5% branches, 93.5% functions, and 94.5% lines. The browser job runs the mock-auth journeys and production Google-auth shell journey against disposable PostgreSQL. GitHub protects `master`, applies these requirements to administrators, blocks direct pushes and force pushes, and requires changes to arrive through a pull request. A second-person approval is not required because this is currently a single-owner repository.
 
-Every branch push runs CI without production credentials. Merging an application change to `master` reruns the same checks and, only after they pass, builds the release image and deploys production. Infrastructure changes require a separate manual **OCI infrastructure** deployment after merge, as described below.
+Every non-`master` branch push runs CI without production credentials. GitHub records those required results on the pull request. Because protected `master` accepts only up-to-date pull requests with both checks passing, the merge commit does not rerun the suites; it proceeds directly to the production build and deployment. Infrastructure changes require a separate manual **OCI infrastructure** deployment after merge, as described below.
 
 ## Production Infrastructure
 
@@ -115,9 +115,9 @@ See [infra/README.md](infra/README.md) for variables, IAM/WIF policy, state hand
 
 ## Application Delivery
 
-Every pushed commit runs the **Application CI and deployment** workflow. Unit tests, linting, type checks, coverage, and browser E2E tests use an ephemeral PostgreSQL service on the GitHub runner; they never connect to production. Coverage HTML and JSON reports are retained as workflow artifacts.
+Every commit pushed to a non-`master` branch runs the **Application CI** workflow. Unit tests, linting, type checks, coverage, and browser E2E tests use an ephemeral PostgreSQL service on the GitHub runner; they never connect to production. Coverage HTML and JSON reports are retained as workflow artifacts.
 
-Successful commits on feature branches stop after CI. A successful commit on `master` additionally:
+Successful commits on feature branches stop after CI. Branch protection requires those results before merge. A merged commit on `master` starts the separate **Application production deployment** workflow, which:
 
 1. Builds and attests `linux/amd64` and `linux/arm64` images in GHCR.
 2. Selects the immutable image digest rather than a mutable tag.

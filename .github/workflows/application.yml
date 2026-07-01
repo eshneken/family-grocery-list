@@ -1,131 +1,21 @@
-name: Application CI and deployment
+name: Application production deployment
 
 on:
   push:
+    branches:
+      - master
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: application-${{ github.ref }}
+  group: application-production
   cancel-in-progress: false
 
 jobs:
-  unit:
-    name: Unit tests and coverage
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: family_grocery
-          POSTGRES_USER: grocery
-          POSTGRES_PASSWORD: grocery
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U grocery -d family_grocery"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgresql://grocery:grocery@127.0.0.1:5432/family_grocery?schema=public
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Generate Prisma client
-        run: npm run db:generate
-      - name: Apply migrations to CI PostgreSQL
-        run: npm run db:migrate:deploy
-      - name: Lint
-        run: npm run lint
-      - name: Type check
-        run: npm run typecheck
-      - name: Run unit tests with coverage
-        run: npm run test:coverage
-      - name: Add coverage summary
-        shell: bash
-        run: |
-          node <<'NODE' >> "$GITHUB_STEP_SUMMARY"
-          const summary = require('./coverage/coverage-summary.json').total;
-          console.log('### Test coverage');
-          console.log('| Metric | Coverage |');
-          console.log('| --- | ---: |');
-          for (const metric of ['statements', 'branches', 'functions', 'lines']) {
-            console.log(`| ${metric} | ${summary[metric].pct}% |`);
-          }
-          NODE
-      - name: Upload coverage report
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: coverage-${{ github.sha }}
-          path: coverage/
-          if-no-files-found: warn
-          retention-days: 30
-
-  e2e:
-    name: Browser E2E tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_DB: family_grocery
-          POSTGRES_USER: grocery
-          POSTGRES_PASSWORD: grocery
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U grocery -d family_grocery"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      DATABASE_URL: postgresql://grocery:grocery@127.0.0.1:5432/family_grocery?schema=public
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
-        with:
-          node-version: 22
-          cache: npm
-      - name: Install dependencies
-        run: npm ci
-      - name: Generate Prisma client
-        run: npm run db:generate
-      - name: Apply migrations to CI PostgreSQL
-        run: npm run db:migrate:deploy
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium webkit
-      - name: Run mock-auth browser journeys
-        run: npm run e2e
-      - name: Run production Google-auth shell journey
-        run: npm run e2e:google-shell
-      - name: Upload Playwright diagnostics
-        if: always()
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
-        with:
-          name: playwright-${{ github.sha }}
-          path: |
-            playwright-report/
-            test-results/
-          if-no-files-found: ignore
-          retention-days: 14
-
   container:
     name: Build and publish release image
-    if: github.ref == 'refs/heads/master'
-    needs:
-      - unit
-      - e2e
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
