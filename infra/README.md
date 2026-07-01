@@ -2,11 +2,11 @@
 
 This directory contains OCI infrastructure for the Family Grocery List production environment. Deployment-specific values, including region and hostnames, are supplied only through ignored local Terraform variable files.
 
-- `bootstrap/`: one-time state bucket, Vault, and software key for application secrets. Start with local state, then migrate it to the bucket it creates.
-- `production/`: VCN, security groups, OKE managed A1 worker, private OCI PostgreSQL, Vault secret, Bastion, reserved public IP, and the public DNS record.
-- `cluster-foundation/`: Kubernetes namespace, PostgreSQL connection material, Caddy, persistent certificate state, and the OCI load-balancer Service.
+- [`bootstrap/`](bootstrap/README.md): one-time state bucket, Vault, and software key for application secrets. Start with local state, then migrate it to the bucket it creates.
+- [`production/`](production/README.md): VCN, security groups, OKE managed A1 worker, private OCI PostgreSQL, Vault secret, Bastion, reserved public IP, and the public DNS record.
+- [`cluster-foundation/`](cluster-foundation/README.md): Kubernetes namespace, PostgreSQL connection material, Caddy, persistent certificate state, and the OCI load-balancer Service.
 
-Application releases remain a separate follow-on workflow. These roots create the OCI environment and durable Kubernetes foundation but do not deploy the application image.
+Return to the [project README](../README.md). Application releases remain a separate follow-on workflow documented in the [application deployment guide](../deploy/README.md). These roots create the OCI environment and durable Kubernetes foundation but do not deploy the application image.
 
 ## Architecture And Ownership
 
@@ -14,9 +14,9 @@ Terraform is split because each stage depends on outputs or APIs created by the 
 
 | Root | Owns | State key |
 | --- | --- | --- |
-| `bootstrap` | Object Storage state bucket, Vault, software key | `bootstrap/terraform.tfstate` |
-| `production` | VCN, gateways, subnets, NSGs, OKE, A1 node pool, PostgreSQL, Bastion, DNS, reserved public IP | `production/terraform.tfstate` |
-| `cluster-foundation` | `grocery` namespace, database Secret/CA, Caddy, PVC, `LoadBalancer` Service, LB display name | `cluster-foundation/terraform.tfstate` |
+| [`bootstrap`](bootstrap/README.md) | Object Storage state bucket, Vault, software key | `bootstrap/terraform.tfstate` |
+| [`production`](production/README.md) | VCN, gateways, subnets, NSGs, OKE, A1 node pool, PostgreSQL, Bastion, DNS, reserved public IP | `production/terraform.tfstate` |
+| [`cluster-foundation`](cluster-foundation/README.md) | `grocery` namespace, database Secret/CA, Caddy, PVC, `LoadBalancer` Service, LB display name | `cluster-foundation/terraform.tfstate` |
 
 The state bucket is private and versioned. GitHub passes its namespace, the Vault/key OCIDs, and the OKE cluster OCID between jobs rather than storing those dynamic values as repository variables. Terraform state contains sensitive generated values, including the PostgreSQL password; never commit, upload, or print state.
 

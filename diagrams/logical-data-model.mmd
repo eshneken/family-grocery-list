@@ -1,0 +1,124 @@
+%%{init: {"theme": "base", "themeVariables": {"primaryColor": "#f8fafc", "primaryTextColor": "#111827", "primaryBorderColor": "#64748b", "lineColor": "#64748b"}, "themeCSS": ".edgeLabel rect.background { fill: #ffffff !important; } .edgeLabel text, .edgeLabel tspan { fill: #111827 !important; }"}}%%
+erDiagram
+  HOUSEHOLD {
+    string id PK
+    string name
+    datetime createdAt
+  }
+
+  USER {
+    string id PK
+    string email UK
+    string displayName
+    AuthProvider authProvider
+  }
+
+  MEMBERSHIP {
+    string id PK
+    string householdId FK
+    string userId FK "optional"
+    string approvedEmail
+    MemberStatus status
+    Capability[] capabilities
+  }
+
+  STORE {
+    string id PK
+    string householdId FK
+    string name
+    boolean enabled
+    json categoryOrder
+  }
+
+  GROCERY_ITEM {
+    string id PK
+    string householdId FK
+    string canonicalName
+    string category
+    string defaultStoreId FK "optional"
+    boolean anyStore
+    boolean recurringStaple
+  }
+
+  GROCERY_ALIAS {
+    string id PK
+    string groceryItemId FK
+    string alias
+  }
+
+  SHOPPING_LIST {
+    string id PK
+    string householdId FK
+    ShoppingListStatus status
+    datetime createdAt
+    datetime lockedAt "optional"
+    datetime completedAt "optional"
+  }
+
+  LIST_ITEM {
+    string id PK
+    string shoppingListId FK
+    string groceryItemId FK "optional"
+    string storeId FK "optional"
+    string requestedById FK
+    string displayName
+    string quantityText "optional"
+    string category
+    ListItemStatus status
+  }
+
+  SHOPPING_TRIP {
+    string id PK
+    string householdId FK
+    string shoppingListId FK,UK
+    string activeShopperId FK
+    string storeId FK "optional"
+    ShoppingTripStatus status
+    datetime startedAt
+    datetime completedAt "optional"
+  }
+
+  ITEM_OUTCOME {
+    string id PK
+    string listItemId FK
+    string actorId FK
+    ListItemStatus outcome
+    string note "optional"
+    datetime createdAt
+  }
+
+  CORRECTION {
+    string id PK
+    string householdId FK
+    string correctedItemId FK
+    string correctedStoreId FK "optional"
+    string createdById FK
+    string inputText
+    string correctedCategory
+  }
+
+  HOUSEHOLD ||--o{ MEMBERSHIP : authorizes
+  USER o|--o{ MEMBERSHIP : identifies
+  HOUSEHOLD ||--o{ STORE : configures
+  HOUSEHOLD ||--o{ GROCERY_ITEM : catalogs
+  STORE o|--o{ GROCERY_ITEM : defaults
+  GROCERY_ITEM ||--o{ GROCERY_ALIAS : recognizes
+
+  HOUSEHOLD ||--o{ SHOPPING_LIST : owns
+  SHOPPING_LIST ||--o{ LIST_ITEM : contains
+  GROCERY_ITEM o|--o{ LIST_ITEM : normalizes
+  STORE o|--o{ LIST_ITEM : targets
+  MEMBERSHIP ||--o{ LIST_ITEM : requests
+
+  SHOPPING_LIST ||--o| SHOPPING_TRIP : becomes
+  HOUSEHOLD ||--o{ SHOPPING_TRIP : runs
+  MEMBERSHIP ||--o{ SHOPPING_TRIP : shops
+  STORE o|--o{ SHOPPING_TRIP : visits
+
+  LIST_ITEM ||--o{ ITEM_OUTCOME : records
+  MEMBERSHIP ||--o{ ITEM_OUTCOME : acts
+
+  HOUSEHOLD ||--o{ CORRECTION : learns
+  GROCERY_ITEM ||--o{ CORRECTION : corrects
+  STORE o|--o{ CORRECTION : assigns
+  MEMBERSHIP ||--o{ CORRECTION : creates

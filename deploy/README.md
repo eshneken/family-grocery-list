@@ -2,6 +2,8 @@
 
 Application delivery is split between `.github/workflows/application-ci.yml` and `.github/workflows/application.yml`. Terraform owns OCI and the durable cluster foundation. The CI workflow validates feature branches, while the production workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
 
+Documentation: [project README](../README.md) | [OCI infrastructure guide](../infra/README.md) | [cluster foundation](../infra/cluster-foundation/README.md)
+
 ## Branch And Test Flow
 
 Every push to a non-`master` branch runs two independent jobs:
@@ -15,7 +17,7 @@ Protected `master` requires **Unit tests and coverage** and **Browser E2E tests*
 
 ## Production Environment Settings
 
-The existing GitHub `production` environment supplies the OCI WIF values documented in `infra/README.md`. Add these application secrets:
+The existing GitHub `production` environment supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#one-time-wif-bootstrap). Add these application secrets:
 
 | Secret | Purpose |
 | --- | --- |

@@ -2,6 +2,8 @@
 
 This root configures long-lived Kubernetes infrastructure after the OCI `production` root has created OKE and PostgreSQL. It does not deploy the application image or run migrations.
 
+Documentation: [infrastructure overview](../README.md) | [production OCI environment](../production/README.md) | [project README](../../README.md)
+
 It creates the `grocery` namespace, a PostgreSQL CA ConfigMap and database Secret, Caddy with persistent ACME state, and the public `LoadBalancer` Service bound to the pre-reserved OCI public IP.
 
 ## Local setup
@@ -39,3 +41,5 @@ The production state is read-only input to this root. The OCI identity running i
 - The public service must be applied only after the application Service named `grocery-app` exists; Caddy will otherwise return upstream errors, though it can still obtain and retain certificates.
 - The service annotations are intentionally centralized in `load-balancer-service.tf`. Confirm them against the installed OCI cloud-controller-manager version during the first live apply.
 - `load_balancer_display_name` defaults to `lb-grocery`. The post-provision reconciler updates only the display name; listeners, backends, and security configuration remain owned by OKE's cloud-controller-manager. On `terraform destroy`, it removes any CCM LB still attached to the reserved IP before deleting the Kubernetes Service, so the foundation root resets cleanly.
+
+Next: follow the [application deployment guide](../../deploy/README.md).
