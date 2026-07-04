@@ -74,13 +74,47 @@ export async function moveListItemCategory(input: {
   category: string;
   recurringStaple: boolean;
 }) {
+  const item = await prisma.listItem.findFirstOrThrow({
+    where: { id: input.listItemId, shoppingList: { householdId: input.householdId } },
+    select: { displayName: true, storeId: true }
+  });
+  return updateListItem({ ...input, displayName: item.displayName, storeId: item.storeId });
+}
+
+export async function updateListItem(input: {
+  householdId: string;
+  listItemId: string;
+  displayName: string;
+  category: string;
+  storeId?: string | null;
+  recurringStaple: boolean;
+}) {
   return prisma.$transaction(async (tx) => {
     const item = await tx.listItem.findFirstOrThrow({
       where: {
         id: input.listItemId,
-        shoppingList: { householdId: input.householdId }
+        status: "pending",
+        shoppingList: { householdId: input.householdId, status: "collecting" }
       }
     });
+
+    const displayName = input.displayName.trim().replace(/\s+/g, " ");
+    const storeId = input.storeId === undefined ? item.storeId : input.storeId;
+    if (storeId) {
+      const store = await tx.store.findFirst({ where: { id: storeId, householdId: input.householdId } });
+      if (!store) throw new Error("Choose a store in your household.");
+    }
+    const duplicate = await tx.listItem.findFirst({
+      where: {
+        shoppingListId: item.shoppingListId,
+        id: { not: item.id },
+        status: "pending",
+        storeId,
+        displayName: { equals: displayName, mode: "insensitive" }
+      },
+      select: { id: true }
+    });
+    if (duplicate) throw new Error("That item is already on this list for the same store.");
 
     const groceryItem = item.groceryItemId
       ? await tx.groceryItem.update({
@@ -94,20 +128,21 @@ export async function moveListItemCategory(input: {
           where: {
             householdId_canonicalName: {
               householdId: input.householdId,
-              canonicalName: item.displayName
+              canonicalName: displayName
             }
           },
           update: {
             category: input.category,
-            defaultStoreId: item.storeId,
+            defaultStoreId: storeId,
+            anyStore: storeId === null,
             recurringStaple: input.recurringStaple
           },
           create: {
             householdId: input.householdId,
-            canonicalName: item.displayName,
+            canonicalName: displayName,
             category: input.category,
-            defaultStoreId: item.storeId,
-            anyStore: item.storeId === null,
+            defaultStoreId: storeId,
+            anyStore: storeId === null,
             recurringStaple: input.recurringStaple
           }
         });
@@ -129,7 +164,9 @@ export async function moveListItemCategory(input: {
     return tx.listItem.update({
       where: { id: item.id },
       data: {
+        displayName,
         category: input.category,
+        storeId,
         groceryItemId: groceryItem.id
       },
       include: listItemInclude

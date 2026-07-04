@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ClipboardList, History, ListPlus, Settings, ShoppingCart } from "lucide-react";
+import { ClipboardList } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { mockUsers } from "@/features/auth/mock-auth";
 import { requireMembership } from "@/features/auth/authorization";
@@ -7,14 +7,9 @@ import { isExpectedAuthError } from "@/features/auth/errors";
 import { isMockAuthEnabled } from "@/features/auth/mode";
 import { ensureSeedHousehold } from "@/features/household/household.service";
 import { GoogleUserControls } from "./auth-controls";
+import { MobileNav } from "./mobile-nav";
 import { MockUserSwitcher } from "./mock-user-switcher";
-
-const navItems = [
-  { href: "/list", label: "List", icon: ListPlus, capability: "request" },
-  { href: "/shop", label: "Shop", icon: ShoppingCart, capability: "shop" },
-  { href: "/history", label: "History", icon: History, capability: "request" },
-  { href: "/admin", label: "Admin", icon: Settings, capability: "administer" }
-] as const;
+import { navItems } from "./nav-items";
 
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const mockMode = isMockAuthEnabled();
@@ -65,28 +60,21 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="workspace">
         <header className="topbar">
-          <div>
+          <div className="topbar-context">
             <p className="eyebrow">{household?.name ?? "Family Grocery"}</p>
             <h1>{activeTrip ? `${activeTrip.activeShopper.user?.firstName ?? "Someone"} is shopping at ${activeTrip.store?.name ?? "Any Store"} now` : "Next grocery run"}</h1>
           </div>
           {mockMode ? (
             <MockUserSwitcher users={mockUsers} currentEmail={selectedMockEmail} />
           ) : (
-            <GoogleUserControls displayName={membership.user.displayName} email={membership.user.email} />
+            <GoogleUserControls firstName={membership.user.firstName} imageUrl={membership.user.imageUrl} />
           )}
         </header>
 
         {children}
       </div>
 
-      <nav className="bottom-nav" aria-label="Primary navigation">
-        {visibleNav.map((item) => (
-          <Link key={item.href} href={item.href}>
-            <item.icon aria-hidden="true" />
-            <span>{item.label}</span>
-          </Link>
-        ))}
-      </nav>
+      <MobileNav visibleHrefs={visibleNav.map((item) => item.href)} />
     </div>
   );
 }

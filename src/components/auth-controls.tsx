@@ -1,5 +1,6 @@
 "use client";
 
+import { LogOut } from "lucide-react";
 import { signIn, signOut } from "next-auth/react";
 import { useTransition } from "react";
 
@@ -22,15 +23,21 @@ export function GoogleSignInButton() {
   );
 }
 
-export function GoogleUserControls({ displayName, email }: { displayName: string; email: string }) {
+export function GoogleUserControls({ firstName, imageUrl }: { firstName: string; imageUrl: string | null }) {
   return (
     <div className="auth-controls">
-      <span>
-        <strong>{displayName}</strong>
-        <small>{email}</small>
-      </span>
-      <button className="secondary-button" onClick={() => void signOut({ callbackUrl: "/login" })} type="button">
-        Sign out
+      {imageUrl ? (
+        // Identity-provider avatars can use external hosts that are not known at build time.
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={imageUrl} alt="" className="header-avatar" />
+      ) : (
+        <span className="header-avatar avatar-fallback" aria-hidden="true">
+          {firstName.slice(0, 1).toUpperCase()}
+        </span>
+      )}
+      <strong className="header-user-name">{firstName}</strong>
+      <button className="secondary-button header-signout" aria-label="Sign out" onClick={() => void signOut({ callbackUrl: "/login" })} type="button">
+        <LogOut size={18} aria-hidden="true" />
       </button>
     </div>
   );

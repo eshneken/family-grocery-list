@@ -10,6 +10,7 @@ import { requireCapability } from "@/features/auth/authorization";
 import { normalizeEmail } from "@/features/auth/email";
 import { isMockAuthEnabled } from "@/features/auth/mode";
 import { mockUsers } from "@/features/auth/mock-auth";
+import { categories } from "@/features/catalog/categories";
 import {
   addStore,
   approveMember,
@@ -19,7 +20,7 @@ import {
   setMemberStatus,
   updateMember
 } from "@/features/household/household.service";
-import { addRequest, completeShoppingTrip, markItemOutcome, moveListItemCategory, startShoppingTrip } from "@/features/shopping/shopping.service";
+import { addRequest, completeShoppingTrip, markItemOutcome, moveListItemCategory, startShoppingTrip, updateListItem } from "@/features/shopping/shopping.service";
 
 const capabilityValues: Capability[] = ["request", "shop", "administer"];
 
@@ -176,6 +177,31 @@ export async function moveItemCategoryAction(formData: FormData) {
     listItemId: itemId,
     category,
     recurringStaple
+  });
+  await refreshAll();
+}
+
+export async function updateListItemAction(formData: FormData) {
+  const requester = await requireCapability("request");
+  const parsed = z
+    .object({
+      itemId: z.string().min(1),
+      displayName: z.string().trim().min(1, "Enter an item name.").max(120),
+      category: z.enum(categories)
+    })
+    .parse({
+      itemId: formString(formData, "itemId"),
+      displayName: formString(formData, "displayName"),
+      category: formString(formData, "category")
+    });
+
+  await updateListItem({
+    householdId: requester.householdId,
+    listItemId: parsed.itemId,
+    displayName: parsed.displayName,
+    category: parsed.category,
+    storeId: formString(formData, "storeId") || null,
+    recurringStaple: formData.get("recurringStaple") === "on"
   });
   await refreshAll();
 }

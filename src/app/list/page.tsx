@@ -61,10 +61,10 @@ export default async function ListPage() {
           <p>Add milk, bananas, snacks, or a store-specific favorite.</p>
         </section>
       ) : (
-        Object.entries(grouped).map(([category, items]) => <GrocerySection key={category} title={category} items={items} />)
+        Object.entries(grouped).map(([category, items]) => <GrocerySection key={category} title={category} items={items} stores={stores} />)
       )}
 
-      <section className="panel">
+      <section className="panel common-suggestions-panel">
         <h2>Common suggestions</h2>
         {catalogSuggestions.length === 0 ? (
           <p>Suggestions will appear after completed shopping runs. They use the last 10 runs, weighted toward recent trips.</p>

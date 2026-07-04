@@ -8,6 +8,7 @@ type GrocerySectionProps = {
     displayName: string;
     quantityText?: string | null;
     category: string;
+    storeId?: string | null;
     status: ListItemStatus;
     notes?: string | null;
     substituteText?: string | null;
@@ -16,9 +17,10 @@ type GrocerySectionProps = {
     requestedBy?: { user?: { firstName: string; imageUrl: string | null } | null; approvedEmail: string };
   }>;
   shopperActions?: boolean;
+  stores?: Array<{ id: string; name: string }>;
 };
 
-export function GrocerySection({ title, items, shopperActions }: GrocerySectionProps) {
+export function GrocerySection({ title, items, shopperActions, stores = [] }: GrocerySectionProps) {
   if (items.length === 0) return null;
   return (
     <section className="grocery-section" aria-labelledby={`section-${title}`}>
@@ -31,6 +33,8 @@ export function GrocerySection({ title, items, shopperActions }: GrocerySectionP
             displayName={item.displayName}
             quantityText={item.quantityText}
             category={item.category}
+            storeId={item.storeId}
+            stores={stores}
             status={item.status}
             notes={item.notes}
             substituteText={item.substituteText}
