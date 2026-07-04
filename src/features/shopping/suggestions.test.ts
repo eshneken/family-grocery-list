@@ -156,6 +156,34 @@ describe("shopping suggestions", () => {
     expect(suggestions[0].displayName).toBe("Recent Favorite");
   });
 
+  it("suggests a completed free-form request that has no learned catalog item", async () => {
+    const { testHousehold, shopper, giant } = await setupSuggestionHousehold("common-free-form");
+    await addRequest({
+      householdId: testHousehold.household.id,
+      requestedById: testHousehold.admin.id,
+      rawText: "special crackers"
+    });
+    await startShoppingTrip({ householdId: testHousehold.household.id, shopperId: shopper.id, storeId: giant.id });
+    const trip = await prisma.shoppingTrip.findFirstOrThrow({
+      where: { householdId: testHousehold.household.id, status: "active" },
+      include: { shoppingList: { include: { items: true } } }
+    });
+    await markItemOutcome({
+      householdId: testHousehold.household.id,
+      actorId: shopper.id,
+      itemId: trip.shoppingList.items[0].id,
+      outcome: "purchased"
+    });
+    await completeShoppingTrip(testHousehold.household.id, shopper.id);
+
+    const currentList = await prisma.shoppingList.findFirstOrThrow({
+      where: { householdId: testHousehold.household.id, status: "collecting" }
+    });
+    await expect(getCommonSuggestions(testHousehold.household.id, currentList.id)).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ displayName: "special crackers", groceryItemId: null })])
+    );
+  });
+
   it("excludes common suggestions already on the current list", async () => {
     const { testHousehold, shopper, giant } = await setupSuggestionHousehold("common-current-list-dedup");
     await addCatalogItem({

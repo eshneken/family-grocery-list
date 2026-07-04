@@ -46,16 +46,18 @@ export default async function ShopPage() {
           <h2>Choose a store</h2>
           {collectingList.items.length === 0 ? <p>No items are ready to shop yet. Add requests from the List tab first.</p> : null}
           {stores.length === 0 ? <p>No stores are enabled. Add or enable a store from Admin first.</p> : null}
-          <form action={startShoppingTripAction} className="store-filter">
+          <form action={startShoppingTripAction} className="store-filter start-shopping-form">
             {stores.map((store, index) => (
               <label key={store.id}>
                 <input type="radio" name="storeId" value={store.id} defaultChecked={index === 0} />
                 {store.name}
               </label>
             ))}
-            <button className="primary-button" disabled={collectingList.items.length === 0 || stores.length === 0}>
-              Start shopping
-            </button>
+            <div className="start-shopping-action">
+              <button className="primary-button" disabled={collectingList.items.length === 0 || stores.length === 0}>
+                Start shopping
+              </button>
+            </div>
           </form>
         </section>
       ) : conflict ? (
@@ -85,10 +87,10 @@ export default async function ShopPage() {
               </div>
               <div className="summary-card">
                 <strong>{counts?.pending ?? 0}</strong>
-                Moving to next list
+                Moved
               </div>
             </div>
-            <form action={completeShoppingTripAction}>
+            <form action={completeShoppingTripAction} className="complete-shopping-form">
               <button className="primary-button">Complete shopping run</button>
             </form>
           </section>

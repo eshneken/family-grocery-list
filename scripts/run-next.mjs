@@ -11,10 +11,10 @@ export function prepareLaunchConfig(argv, sourceEnv = process.env, loadEnvironme
   return resolveLaunchConfig(argv, sourceEnv);
 }
 
-export function launchNext(argv = process.argv.slice(2), sourceEnv = process.env, loadEnvironment = loadEnvConfig) {
+export function launchNext(argv = process.argv.slice(2), sourceEnv = process.env, loadEnvironment = loadEnvConfig, spawnProcess = spawn) {
   const config = prepareLaunchConfig(argv, sourceEnv, loadEnvironment);
   const nextBin = path.resolve("node_modules/next/dist/bin/next");
-  const child = spawn(process.execPath, [nextBin, config.command, ...config.forwardedArgs], {
+  const child = spawnProcess(process.execPath, [nextBin, config.command, ...config.forwardedArgs], {
     env: config.env,
     stdio: "inherit"
   });

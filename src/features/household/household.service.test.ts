@@ -70,6 +70,51 @@ describe("household service database behavior", () => {
     }
   });
 
+  it("derives member profile defaults and rejects blank store names", async () => {
+    const testHousehold = await createTestHousehold("member-defaults");
+    const email = "defaults@example.com";
+    try {
+      const member = await approveMember({
+        householdId: testHousehold.household.id,
+        email,
+        capabilities: ["request"]
+      });
+      expect(member.user).toMatchObject({ firstName: "defaults", lastName: "Family" });
+
+      await expect(addStore(testHousehold.household.id, "   ")).rejects.toThrow("Store name is required");
+    } finally {
+      await cleanupTestHousehold(testHousehold);
+      await prisma.user.deleteMany({ where: { email } });
+    }
+  });
+
+  it("creates a fallback avatar when updating a legacy membership without a user", async () => {
+    const testHousehold = await createTestHousehold("legacy-member");
+    const email = "legacy-updated@example.com";
+    try {
+      const legacy = await prisma.membership.create({
+        data: {
+          householdId: testHousehold.household.id,
+          approvedEmail: "legacy-member@example.com",
+          status: "active",
+          capabilities: ["request"]
+        }
+      });
+
+      const updated = await updateMember({
+        membershipId: legacy.id,
+        email,
+        firstName: "Legacy",
+        lastName: "Member",
+        capabilities: ["request"]
+      });
+      expect(updated.user?.imageUrl).toContain("seed=Legacy");
+    } finally {
+      await cleanupTestHousehold(testHousehold);
+      await prisma.user.deleteMany({ where: { email } });
+    }
+  });
+
   it("returns an existing household from seed ensure without creating another", async () => {
     const testHousehold = await createTestHousehold("ensure-seed");
     try {

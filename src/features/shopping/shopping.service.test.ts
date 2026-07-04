@@ -10,7 +10,8 @@ import {
   markItemOutcome,
   moveListItemCategory,
   seedRecurringStaples,
-  startShoppingTrip
+  startShoppingTrip,
+  updateListItem
 } from "./shopping.service";
 
 describe("shopping service helpers", () => {
@@ -90,6 +91,69 @@ describe("shopping service database behavior", () => {
           where: { groceryItemId_alias: { groceryItemId: learned.id, alias: "dragon fruit" } }
         })
       ).resolves.toBeTruthy();
+    } finally {
+      await cleanupTestHousehold(testHousehold);
+    }
+  });
+
+  it("corrects a request name while learning the original spelling as an alias", async () => {
+    const testHousehold = await createTestHousehold("item-correction");
+    try {
+      const item = await addRequest({
+        householdId: testHousehold.household.id,
+        requestedById: testHousehold.admin.id,
+        rawText: "banannas"
+      });
+      const wholeFoods = testHousehold.stores.find((store) => store.name === "Whole Foods")!;
+
+      const updated = await updateListItem({
+        householdId: testHousehold.household.id,
+        listItemId: item.id,
+        displayName: "Bananas",
+        category: "Produce",
+        storeId: wholeFoods.id,
+        recurringStaple: true
+      });
+
+      expect(updated).toMatchObject({ displayName: "Bananas", category: "Produce", storeId: wholeFoods.id });
+      const learned = await prisma.groceryItem.findUniqueOrThrow({
+        where: { householdId_canonicalName: { householdId: testHousehold.household.id, canonicalName: "Bananas" } }
+      });
+      expect(learned.recurringStaple).toBe(true);
+      expect(learned.defaultStoreId).toBe(wholeFoods.id);
+      await expect(
+        prisma.groceryAlias.findUniqueOrThrow({
+          where: { groceryItemId_alias: { groceryItemId: learned.id, alias: "banannas" } }
+        })
+      ).resolves.toBeTruthy();
+    } finally {
+      await cleanupTestHousehold(testHousehold);
+    }
+  });
+
+  it("rejects editing a request into a duplicate pending item", async () => {
+    const testHousehold = await createTestHousehold("item-correction-duplicate");
+    try {
+      const first = await addRequest({
+        householdId: testHousehold.household.id,
+        requestedById: testHousehold.admin.id,
+        rawText: "milk"
+      });
+      const second = await addRequest({
+        householdId: testHousehold.household.id,
+        requestedById: testHousehold.admin.id,
+        rawText: "bread"
+      });
+
+      await expect(
+        updateListItem({
+          householdId: testHousehold.household.id,
+          listItemId: second.id,
+          displayName: first.displayName,
+          category: "Dairy",
+          recurringStaple: false
+        })
+      ).rejects.toThrow("already on this list");
     } finally {
       await cleanupTestHousehold(testHousehold);
     }
@@ -188,6 +252,27 @@ describe("shopping service database behavior", () => {
           storeId: giant.id
         })
       ).rejects.toThrow(/already shopping/);
+    } finally {
+      await cleanupTestHousehold(testHousehold);
+    }
+  });
+
+  it("describes an active trip without a linked user or selected store", async () => {
+    const testHousehold = await createTestHousehold("anonymous-active-trip");
+    try {
+      const firstShopper = await addTestMember(testHousehold, "first-shopper", ["request", "shop"]);
+      const secondShopper = await addTestMember(testHousehold, "second-shopper", ["request", "shop"]);
+      await addRequest({
+        householdId: testHousehold.household.id,
+        requestedById: testHousehold.admin.id,
+        rawText: "bananas"
+      });
+      await startShoppingTrip({ householdId: testHousehold.household.id, shopperId: firstShopper.id });
+      await prisma.membership.update({ where: { id: firstShopper.id }, data: { userId: null } });
+
+      await expect(
+        startShoppingTrip({ householdId: testHousehold.household.id, shopperId: secondShopper.id })
+      ).rejects.toThrow(`${firstShopper.approvedEmail} is already shopping at Any Store now`);
     } finally {
       await cleanupTestHousehold(testHousehold);
     }
