@@ -15,19 +15,21 @@ test.beforeEach(async ({ context }) => {
 
 test("opens the requestor list as the first screen", async ({ page }) => {
   await page.goto("/list");
-  await expect(page.getByRole("heading", { name: "What should go on the next list?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quick add" })).toBeVisible();
+  await expect(page.getByText("Last store visit")).toBeVisible();
+  await expect(page.getByText("No completed store visits yet.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Shop" }).first()).toBeVisible();
 });
 
 test("mock user switch lands on the list page", async ({ page }) => {
   await page.goto("/admin");
-  await expect(page.getByRole("heading", { name: "Household access and stores" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
 
   await page.getByLabel("Current user").selectOption("ayelet@example.com");
 
   await expect(page).toHaveURL(/\/list$/);
   await expect(page.getByLabel("Current user")).toHaveValue("ayelet@example.com");
-  await expect(page.getByRole("heading", { name: "What should go on the next list?" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Quick add" })).toBeVisible();
 });
 
 test("an unknown mock cookie cannot select or create an arbitrary user", async ({ page, context }) => {
@@ -112,6 +114,7 @@ test("iPhone shopper rows keep purchase direct and secondary actions compact", a
   await expect(page.locator("article").filter({ hasText: "sparkling water" })).toBeVisible();
 
   await page.goto("/shop");
+  await expect(page.getByRole("heading", { name: "Shopper Mode" })).toBeVisible();
   await page.getByLabel("Giant").check();
   await page.getByRole("button", { name: "Start shopping" }).click();
   await expect(page.getByRole("heading", { name: "Giant run" })).toBeVisible();
@@ -150,10 +153,22 @@ test("shopper starts a store run, purchases an item, and sees history", async ({
   await expect(row).toContainText("Purchased");
 
   await page.getByRole("button", { name: "Complete shopping run" }).click();
-  await expect(page.getByRole("heading", { name: "Start a shopping run" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Choose a store" })).toBeVisible();
+  await page.goto("/list");
+  const lastVisit = page.getByLabel("Last store visit");
+  await expect(lastVisit).toContainText("Giant");
+  await expect(lastVisit).toContainText("Gina · Today");
+  await expect(lastVisit.locator(".last-visit-avatar")).toBeVisible();
   await page.goto("/history");
+  await expect(page.getByRole("heading", { name: "Shopping History" })).toBeVisible();
+  await expect(page.getByLabel("Shopping history dashboard")).toContainText("Completed Runs - Past 30 Days");
+  await expect(page.getByLabel("Shopping history dashboard")).toContainText("Giant");
+  expect(await page.locator("html").evaluate((element) => element.scrollWidth <= window.innerWidth)).toBe(true);
   const trip = page.locator("details").filter({ hasText: "Giant" });
   await expect(trip).toBeVisible();
+  await expect(trip.getByText("1 purchased", { exact: true })).toBeVisible();
+  await expect(trip.locator(".disclosure-closed")).toBeVisible();
   await trip.locator("summary").click();
+  await expect(trip.locator(".disclosure-open")).toBeVisible();
   await expect(page.locator("article").filter({ hasText: "bananas" })).toContainText("Purchased");
 });

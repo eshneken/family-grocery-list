@@ -35,13 +35,9 @@ export default async function ShopPage() {
 
   return (
     <main className="page">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Shopper mode</p>
-          <h2>{activeTrip ? "Active shopping run" : "Start a shopping run"}</h2>
-          <p>Store-specific items for other stores are excluded from this view.</p>
-        </div>
-      </div>
+      <header className="page-title">
+        <h1 className="eyebrow">Shopper Mode</h1>
+      </header>
 
       {!activeTrip ? (
         <section className="panel">
