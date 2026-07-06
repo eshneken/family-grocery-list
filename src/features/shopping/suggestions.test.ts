@@ -6,6 +6,7 @@ import { getCatalogSuggestions, getCommonSuggestions } from "./suggestions";
 
 const households: TestHousehold[] = [];
 
+/** Creates an isolated household and store references used by suggestion-ranking test scenarios. */
 async function setupSuggestionHousehold(label: string) {
   const testHousehold = await createTestHousehold(label);
   households.push(testHousehold);

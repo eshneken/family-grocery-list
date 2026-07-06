@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 import { signIn, signOut } from "next-auth/react";
 import { useTransition } from "react";
 
+/** Starts an account-picker Google sign-in and exposes a pending state to prevent double clicks. */
 export function GoogleSignInButton() {
   const [isPending, startTransition] = useTransition();
 
@@ -23,6 +24,7 @@ export function GoogleSignInButton() {
   );
 }
 
+/** Shows the compact signed-in identity and an icon-only sign-out affordance in the mobile header. */
 export function GoogleUserControls({ firstName, imageUrl }: { firstName: string; imageUrl: string | null }) {
   return (
     <div className="auth-controls">
@@ -43,6 +45,7 @@ export function GoogleUserControls({ firstName, imageUrl }: { firstName: string;
   );
 }
 
+/** Clears the current Google session before reopening the account picker for access recovery. */
 export function GoogleAccountRecoveryButton() {
   const [isPending, startTransition] = useTransition();
 

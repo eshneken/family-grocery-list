@@ -8,6 +8,7 @@ export type GrocerySuggestion = {
   score: number;
 };
 
+/** Builds canonical and display-name keys for items already present on the collecting list. */
 async function currentListKeys(currentListId?: string) {
   if (!currentListId) return new Set<string>();
   const currentItems = await prisma.listItem.findMany({
@@ -21,6 +22,7 @@ async function currentListKeys(currentListId?: string) {
   );
 }
 
+/** Ranks recently completed items, weighting newer trips more heavily and omitting existing requests. */
 export async function getCommonSuggestions(householdId: string, currentListId?: string): Promise<GrocerySuggestion[]> {
   const [recentTrips, alreadyOnList] = await Promise.all([
     prisma.shoppingTrip.findMany({
@@ -64,6 +66,7 @@ export async function getCommonSuggestions(householdId: string, currentListId?: 
     .slice(0, 8);
 }
 
+/** Falls back to learned catalog items, prioritizing recurring staples, when trip history is sparse. */
 export async function getCatalogSuggestions(householdId: string, currentListId?: string): Promise<GrocerySuggestion[]> {
   const [items, alreadyOnList] = await Promise.all([
     prisma.groceryItem.findMany({

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useTransition } from "react";
 import { navItems } from "./nav-items";
 import { shouldRefreshOnReturn } from "@/features/freshness/freshness";
 
+/** Detects an in-progress edit so background refreshes never discard a user's input. */
 function hasFocusedFormControl() {
   const element = document.activeElement;
   return (
@@ -16,18 +17,24 @@ function hasFocusedFormControl() {
   );
 }
 
+/**
+ * Provides capability-filtered mobile navigation and opportunistic stale-data refreshes.
+ * Refreshes are suppressed while offline, editing, or displaying a dialog.
+ */
 export function MobileNav({ visibleHrefs }: { visibleHrefs: string[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const lastRefreshAt = useRef(Date.now());
   const [isRefreshing, startTransition] = useTransition();
 
+  /** Records the refresh before scheduling it so duplicate return events coalesce. */
   const refresh = useCallback(() => {
     lastRefreshAt.current = Date.now();
     startTransition(() => router.refresh());
   }, [router, startTransition]);
 
   useEffect(() => {
+    /** Refreshes only after the freshness policy confirms the current screen is safe to replace. */
     const refreshIfStale = () => {
       if (
         shouldRefreshOnReturn({
@@ -42,6 +49,7 @@ export function MobileNav({ visibleHrefs }: { visibleHrefs: string[] }) {
       }
     };
 
+    /** Limits return checks to a foreground transition instead of every visibility event. */
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") refreshIfStale();
     };

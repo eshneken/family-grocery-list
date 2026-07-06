@@ -41,6 +41,7 @@ export const mockUsers: CurrentUser[] = [
   }
 ];
 
+/** Resolves a deterministic development identity while rejecting unknown cookie values. */
 export async function getMockIdentity(): Promise<AuthenticatedIdentity> {
   const cookieStore = await cookies();
   const selectedEmail = normalizeEmail(

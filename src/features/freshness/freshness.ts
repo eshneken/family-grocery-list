@@ -1,5 +1,9 @@
 export const REFRESH_AFTER_MS = 5 * 60 * 1000;
 
+/**
+ * Decides whether a returning mobile app may refresh without interrupting an edit.
+ * Five minutes avoids unnecessary requests while allowing family changes to surface promptly.
+ */
 export function shouldRefreshOnReturn({
   now,
   lastRefreshAt,

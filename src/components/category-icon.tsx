@@ -1,5 +1,6 @@
 import { categoryIcons } from "@/features/catalog/categories";
 
+/** Renders a resilient category icon, falling back to Other for legacy or unknown categories. */
 export function CategoryIcon({ category }: { category: string }) {
   const Icon = categoryIcons[category as keyof typeof categoryIcons] ?? categoryIcons.Other;
   return (

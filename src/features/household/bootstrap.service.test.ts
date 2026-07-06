@@ -6,6 +6,7 @@ vi.mock("@/lib/prisma", () => ({
   prisma: { $transaction: vi.fn() }
 }));
 
+/** Supplies the minimal transaction double used to verify bootstrap ordering and conflict handling. */
 function transactionFixture() {
   return {
     household: {

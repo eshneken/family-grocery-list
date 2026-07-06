@@ -3,6 +3,7 @@ import { normalizeEmail } from "@/features/auth/email";
 import { prisma } from "@/lib/prisma";
 import { defaultStores } from "./household.service";
 
+/** Signals that a production bootstrap rerun does not match the household it would modify. */
 export class BootstrapConflictError extends Error {
   constructor(message: string) {
     super(message);
@@ -10,6 +11,10 @@ export class BootstrapConflictError extends Error {
   }
 }
 
+/**
+ * Creates the first production household exactly once, or verifies an idempotent rerun.
+ * A mismatch fails closed so deployment configuration cannot silently take over a household.
+ */
 export async function bootstrapHousehold(input: { householdName: string; adminEmail: string }) {
   const householdName = input.householdName.trim();
   const adminEmail = normalizeEmail(input.adminEmail);
@@ -17,6 +22,7 @@ export async function bootstrapHousehold(input: { householdName: string; adminEm
   if (!z.string().email().safeParse(adminEmail).success) throw new Error("A valid administrator email is required.");
 
   return prisma.$transaction(async (tx) => {
+    // Bootstrap owns the first household only; later membership administration belongs in the UI.
     const existingHousehold = await tx.household.findFirst({ orderBy: { createdAt: "asc" } });
     if (existingHousehold) {
       const existingAdmin = await tx.membership.findUnique({

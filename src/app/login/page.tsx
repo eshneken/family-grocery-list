@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { GoogleSignInButton } from "@/components/auth-controls";
 import { isMockAuthEnabled } from "@/features/auth/mode";
 
+/** Shows Google sign-in in production and bypasses it for the controlled mock environment. */
 export default function LoginPage() {
   if (isMockAuthEnabled()) redirect("/list");
 

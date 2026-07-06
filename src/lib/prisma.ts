@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 
+// Next.js reloads modules in development; this global cache avoids opening a new client each time.
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
 export const prisma =

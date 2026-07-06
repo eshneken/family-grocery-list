@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 export const metadata: Metadata = {
   title: "Family Grocery List",
   description: "Shared family grocery list with requestor and shopper flows",
+  // Safari reads these fields when a family member saves the app to their Home Screen.
   appleWebApp: {
     capable: true,
     title: "Grocery",
@@ -23,6 +24,7 @@ export const viewport: Viewport = {
 
 export const dynamic = "force-dynamic";
 
+/** Supplies the document shell, PWA metadata, and shared authenticated application frame. */
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">

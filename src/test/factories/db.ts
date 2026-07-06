@@ -4,6 +4,7 @@ import { approveMember, createHousehold } from "@/features/household/household.s
 
 export type TestHousehold = Awaited<ReturnType<typeof createTestHousehold>>;
 
+/** Creates a uniquely named household with enabled stores for an isolated database test. */
 export async function createTestHousehold(label: string) {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const adminEmail = `admin-${label}-${suffix}@example.com`;
@@ -25,6 +26,7 @@ export async function createTestHousehold(label: string) {
   return { household, admin, stores, emails: [adminEmail] };
 }
 
+/** Adds an active test membership and its associated mock user to a fixture household. */
 export async function addTestMember(
   testHousehold: TestHousehold,
   label: string,
@@ -41,6 +43,7 @@ export async function addTestMember(
   });
 }
 
+/** Inserts a learned catalog item with optional aliases for request-normalization tests. */
 export async function addCatalogItem(input: {
   householdId: string;
   canonicalName: string;
@@ -74,6 +77,7 @@ export async function addCatalogItem(input: {
   return item;
 }
 
+/** Removes one fixture household and its dependent data after a database test completes. */
 export async function cleanupTestHousehold(testHousehold: TestHousehold) {
   const householdId = testHousehold.household.id;
   const memberships = await prisma.membership.findMany({

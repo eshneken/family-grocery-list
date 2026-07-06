@@ -1,3 +1,4 @@
+/** Draws the shared checklist mark used by browser and Apple Home Screen icon routes. */
 export function GroceryAppIcon() {
   return (
     <div

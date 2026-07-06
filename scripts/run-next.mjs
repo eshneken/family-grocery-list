@@ -6,11 +6,13 @@ import { resolveLaunchConfig } from "./run-next-config.mjs";
 
 const { loadEnvConfig } = nextEnv;
 
+/** Loads local environment files before applying the launcher's auth and environment policy. */
 export function prepareLaunchConfig(argv, sourceEnv = process.env, loadEnvironment = loadEnvConfig) {
   loadEnvironment(process.cwd(), argv[0] === "dev");
   return resolveLaunchConfig(argv, sourceEnv);
 }
 
+/** Starts Next.js with validated configuration and forwards termination signals to its child process. */
 export function launchNext(argv = process.argv.slice(2), sourceEnv = process.env, loadEnvironment = loadEnvConfig, spawnProcess = spawn) {
   const config = prepareLaunchConfig(argv, sourceEnv, loadEnvironment);
   const nextBin = path.resolve("node_modules/next/dist/bin/next");
@@ -19,6 +21,7 @@ export function launchNext(argv = process.argv.slice(2), sourceEnv = process.env
     stdio: "inherit"
   });
 
+  // Forwarding signals lets containers and local Ctrl+C shut down the child cleanly.
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => child.kill(signal));
   }

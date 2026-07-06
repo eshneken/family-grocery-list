@@ -20,6 +20,7 @@ type GrocerySectionProps = {
   stores?: Array<{ id: string; name: string }>;
 };
 
+/** Renders one category group and passes the relevant requestor or shopper controls to each row. */
 export function GrocerySection({ title, items, shopperActions, stores = [] }: GrocerySectionProps) {
   if (items.length === 0) return null;
   return (

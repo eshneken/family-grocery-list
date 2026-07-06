@@ -1,6 +1,7 @@
 import { GoogleAccountRecoveryButton } from "@/components/auth-controls";
 import { isMockAuthEnabled } from "@/features/auth/mode";
 
+/** Explains household access denial and offers Google account recovery outside mock mode. */
 export default function UnauthorizedPage() {
   const mockMode = isMockAuthEnabled();
 

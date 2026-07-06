@@ -23,6 +23,10 @@ type ItemRowProps = {
   shopperActions?: boolean;
 };
 
+/**
+ * Displays a grocery item in requestor or shopper mode.
+ * Shopper mode keeps purchase direct and moves secondary actions behind the compact overflow control.
+ */
 export function ItemRow(props: ItemRowProps) {
   return (
     <article className={`item-row item-row-${props.status}${props.shopperActions ? " item-row-shopper" : ""}`}>

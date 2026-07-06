@@ -3,6 +3,7 @@ import { requireCapability } from "@/features/auth/authorization";
 import { redirectForAuthError } from "@/features/auth/navigation";
 import { prisma } from "@/lib/prisma";
 
+/** Loads household membership and store administration for callers with administer capability. */
 export default async function AdminPage() {
   let admin;
   try {

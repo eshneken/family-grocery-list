@@ -4,11 +4,13 @@ import { CapabilityAuthorizationError, MembershipAuthorizationError } from "./er
 import { getAuthenticatedIdentity } from "./identity";
 import type { AuthorizedMembership } from "./types";
 
+/** Returns the oldest household, which is the app's single-household default. */
 export async function getPrimaryHouseholdId() {
   const household = await prisma.household.findFirst({ orderBy: { createdAt: "asc" } });
   return household?.id ?? null;
 }
 
+/** Resolves the signed-in identity to an active membership or throws an auth-domain error. */
 export async function requireMembership(householdId?: string): Promise<AuthorizedMembership> {
   const identity = await getAuthenticatedIdentity();
   const resolvedHouseholdId = householdId ?? (await getPrimaryHouseholdId());
@@ -49,6 +51,7 @@ export async function requireMembership(householdId?: string): Promise<Authorize
   };
 }
 
+/** Requires an active membership to hold a specific household capability. */
 export async function requireCapability(capability: Capability, householdId?: string) {
   const membership = await requireMembership(householdId);
 

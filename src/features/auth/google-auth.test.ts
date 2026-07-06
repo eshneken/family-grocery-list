@@ -6,6 +6,7 @@ import { authOptions, authorizeGoogleProfile } from "./google-auth";
 const cleanupEmails = new Set<string>();
 const cleanupMemberships = new Set<string>();
 
+/** Produces a verified Google-profile payload, with overrides for rejection-path tests. */
 function googleProfile(email: string, overrides: Record<string, unknown> = {}) {
   return {
     id: `google-${email}`,
@@ -20,6 +21,7 @@ function googleProfile(email: string, overrides: Record<string, unknown> = {}) {
   };
 }
 
+/** Creates the primary-household member expected by Google authorization tests. */
 async function addPrimaryMember(status: "active" | "disabled" = "active") {
   await ensureSeedHousehold();
   const household = await prisma.household.findFirstOrThrow({ orderBy: { createdAt: "asc" } });

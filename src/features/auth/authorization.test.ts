@@ -15,6 +15,7 @@ afterEach(async () => {
   testHousehold = undefined;
 });
 
+/** Builds the common active household/member fixture used by authorization cases. */
 async function setup() {
   testHousehold = await createTestHousehold("authorization");
   vi.mocked(getAuthenticatedIdentity).mockResolvedValue({

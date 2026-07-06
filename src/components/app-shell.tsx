@@ -11,6 +11,7 @@ import { MobileNav } from "./mobile-nav";
 import { MockUserSwitcher } from "./mock-user-switcher";
 import { navItems } from "./nav-items";
 
+/** Renders authenticated navigation and shared household context around every application page. */
 export async function AppShell({ children }: { children: React.ReactNode }) {
   const mockMode = isMockAuthEnabled();
   if (mockMode) await ensureSeedHousehold();
@@ -23,6 +24,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
     membership = undefined;
   }
 
+  // Public pages must not fetch household navigation data or expose authenticated controls.
   if (!membership) {
     return <div className="public-workspace">{children}</div>;
   }

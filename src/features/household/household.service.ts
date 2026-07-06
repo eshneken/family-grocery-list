@@ -2,8 +2,10 @@ import type { Capability, Prisma } from "@prisma/client";
 import { normalizeEmail } from "@/features/auth/email";
 import { prisma } from "@/lib/prisma";
 
+/** Starter stores created for a new household and production bootstrap. */
 export const defaultStores = ["Giant", "Whole Foods", "Trader Joe's"];
 
+/** Creates the complete mock-development household fixture in one transaction. */
 export async function createHousehold(name: string, adminEmail: string) {
   const normalizedEmail = normalizeEmail(adminEmail);
   return prisma.$transaction(async (tx) => {
@@ -53,12 +55,14 @@ export async function createHousehold(name: string, adminEmail: string) {
   });
 }
 
+/** Returns the existing mock household or creates its deterministic seed data. */
 export async function ensureSeedHousehold() {
   const household = await prisma.household.findFirst();
   if (household) return household;
   return createHousehold("Shneken Family", "rachel@example.com");
 }
 
+/** Approves or reactivates a household member and synchronizes their local profile. */
 export async function approveMember(input: {
   householdId: string;
   email: string;
@@ -107,6 +111,7 @@ export async function approveMember(input: {
   });
 }
 
+/** Revokes a membership without deleting its historical request and trip records. */
 export async function disableMember(membershipId: string) {
   return prisma.membership.update({
     where: { id: membershipId },
@@ -114,6 +119,7 @@ export async function disableMember(membershipId: string) {
   });
 }
 
+/** Changes only the membership state, preserving the assigned capabilities and profile. */
 export async function setMemberStatus(membershipId: string, status: "active" | "disabled") {
   return prisma.membership.update({
     where: { id: membershipId },
@@ -121,6 +127,7 @@ export async function setMemberStatus(membershipId: string, status: "active" | "
   });
 }
 
+/** Updates a membership and its linked user, creating a fallback profile for legacy data. */
 export async function updateMember(input: {
   membershipId: string;
   email: string;
@@ -162,6 +169,7 @@ export async function updateMember(input: {
   });
 }
 
+/** Adds a store or re-enables a previously disabled store with the same household-local name. */
 export async function addStore(householdId: string, name: string) {
   const trimmedName = name.trim();
   if (!trimmedName) throw new Error("Store name is required.");
@@ -177,6 +185,7 @@ export async function addStore(householdId: string, name: string) {
   });
 }
 
+/** Applies a mixed set of existing-store edits and new-store additions atomically. */
 export async function configureStores(
   householdId: string,
   stores: Array<{ id?: string; name: string; enabled: boolean }>

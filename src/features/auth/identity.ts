@@ -6,6 +6,7 @@ import { isMockAuthEnabled } from "./mode";
 import { getMockIdentity } from "./mock-auth";
 import type { AuthenticatedIdentity } from "./types";
 
+/** Returns a provider-neutral identity, selecting the controlled mock provider only when enabled. */
 export async function getAuthenticatedIdentity(): Promise<AuthenticatedIdentity> {
   if (isMockAuthEnabled()) return getMockIdentity();
 
