@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { addCatalogItem, addTestMember, cleanupTestHousehold, createTestHousehold } from "@/test/factories/db";
-import { groupItemsByCategory, storeLabel } from "./shopping.service";
+import { formatDaysSince, getHistoryDashboard, getLastCompletedTrip, groupItemsByCategory, storeLabel, summarizeStoreVisits } from "./shopping.service";
 import {
   addRequest,
   completeShoppingTrip,
@@ -34,6 +34,35 @@ describe("shopping service helpers", () => {
   it("labels null store sources as Any Store", () => {
     expect(storeLabel(null)).toBe("Any Store");
     expect(storeLabel({ name: "Giant" } as never)).toBe("Giant");
+  });
+
+  it("labels a visit from the same local calendar day as today", () => {
+    expect(formatDaysSince(new Date(2026, 6, 6, 0, 1), new Date(2026, 6, 6, 23, 59))).toBe("Today");
+  });
+
+  it("labels the previous local calendar day as one day ago even when fewer than 24 hours passed", () => {
+    expect(formatDaysSince(new Date(2026, 6, 5, 23, 59), new Date(2026, 6, 6, 0, 1))).toBe("1 day ago");
+  });
+
+  it("pluralizes visits from two or more local calendar days ago", () => {
+    expect(formatDaysSince(new Date(2026, 6, 5, 23, 59), new Date(2026, 6, 7, 0, 1))).toBe("2 days ago");
+  });
+
+  it("ranks recent store visits by count and uses a stable name tie-breaker", () => {
+    expect(
+      summarizeStoreVisits([
+        { store: { name: "Whole Foods" } },
+        { store: { name: "Giant" } },
+        { store: { name: "Whole Foods" } },
+        { store: null },
+        { store: { name: "Giant" } },
+        { store: { name: "Trader Joe's" } }
+      ])
+    ).toEqual([
+      { name: "Giant", count: 2 },
+      { name: "Whole Foods", count: 2 },
+      { name: "Any Store", count: 1 }
+    ]);
   });
 });
 
@@ -184,6 +213,44 @@ describe("shopping service database behavior", () => {
       expect(updated.groceryItemId).toBe(catalogItem.id);
       await expect(prisma.groceryItem.findUniqueOrThrow({ where: { id: catalogItem.id } })).resolves.toMatchObject({
         recurringStaple: true
+      });
+    } finally {
+      await cleanupTestHousehold(testHousehold);
+    }
+  });
+
+  it("ranks only stores visited in the past month", async () => {
+    const testHousehold = await createTestHousehold("history-dashboard");
+    try {
+      const giant = testHousehold.stores.find((store) => store.name === "Giant")!;
+      const wholeFoods = testHousehold.stores.find((store) => store.name === "Whole Foods")!;
+      const now = new Date("2026-07-06T12:00:00Z");
+
+      /** Inserts a minimal completed trip so dashboard queries can be tested without shopper interaction. */
+      const createCompletedTrip = async (storeId: string, completedAt: Date) => {
+        const list = await prisma.shoppingList.create({
+          data: { householdId: testHousehold.household.id, status: "completed", completedAt }
+        });
+        return prisma.shoppingTrip.create({
+          data: {
+            householdId: testHousehold.household.id,
+            shoppingListId: list.id,
+            activeShopperId: testHousehold.admin.id,
+            storeId,
+            status: "completed",
+            completedAt
+          },
+          include: { store: true, activeShopper: { include: { user: true } } }
+        });
+      };
+
+      await createCompletedTrip(giant.id, new Date("2026-07-05T12:00:00Z"));
+      await createCompletedTrip(giant.id, new Date("2026-06-20T12:00:00Z"));
+      await createCompletedTrip(wholeFoods.id, new Date("2026-05-20T12:00:00Z"));
+
+      await expect(getLastCompletedTrip(testHousehold.household.id)).resolves.toMatchObject({ storeId: giant.id });
+      await expect(getHistoryDashboard(testHousehold.household.id, now)).resolves.toEqual({
+        topStores: [{ name: "Giant", count: 2 }]
       });
     } finally {
       await cleanupTestHousehold(testHousehold);

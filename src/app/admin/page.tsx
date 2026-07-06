@@ -23,13 +23,9 @@ export default async function AdminPage() {
 
   return (
     <main className="page">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Admin</p>
-          <h2>Household access and stores</h2>
-          <p>Members are approved by email and can be assigned request, shop, and admin capabilities.</p>
-        </div>
-      </div>
+      <header className="page-title">
+        <h1 className="eyebrow">Admin</h1>
+      </header>
 
       <section className="panel">
         <h2>Add family member</h2>

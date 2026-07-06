@@ -2,7 +2,7 @@ import { addRequestAction } from "@/app/actions";
 import { GrocerySection } from "@/components/grocery-section";
 import { requireCapability } from "@/features/auth/authorization";
 import { redirectForAuthError } from "@/features/auth/navigation";
-import { getCurrentCollectingList, groupItemsByCategory } from "@/features/shopping/shopping.service";
+import { formatDaysSince, getCurrentCollectingList, getLastCompletedTrip, groupItemsByCategory } from "@/features/shopping/shopping.service";
 import { getCatalogSuggestions, getCommonSuggestions } from "@/features/shopping/suggestions";
 import { prisma } from "@/lib/prisma";
 
@@ -15,10 +15,10 @@ export default async function ListPage() {
     redirectForAuthError(error);
   }
 
-  const [list, stores, activeTrip] = await Promise.all([
+  const [list, stores, lastCompletedTrip] = await Promise.all([
     getCurrentCollectingList(requester.householdId),
     prisma.store.findMany({ where: { householdId: requester.householdId, enabled: true }, orderBy: { name: "asc" } }),
-    prisma.shoppingTrip.findFirst({ where: { householdId: requester.householdId, status: "active" } })
+    getLastCompletedTrip(requester.householdId)
   ]);
   const commonSuggestions = await getCommonSuggestions(requester.householdId, list.id);
   const catalogSuggestions = commonSuggestions.length > 0 ? commonSuggestions : await getCatalogSuggestions(requester.householdId, list.id);
@@ -26,13 +26,28 @@ export default async function ListPage() {
 
   return (
     <main className="page">
-      <div className="page-header">
-        <div>
-          <p className="eyebrow">Requestor list</p>
-          <h2>What should go on the next list?</h2>
-          <p>{activeTrip ? "A shopping run is active, so new requests land on the next list." : "Add items for the household to request."}</p>
-        </div>
-      </div>
+      <section className="panel last-visit-panel" aria-labelledby="last-visit-heading">
+        <p className="eyebrow" id="last-visit-heading">Last store visit</p>
+        {lastCompletedTrip ? (
+          <div className="last-visit-content">
+            {lastCompletedTrip.activeShopper.user?.imageUrl ? (
+              // Identity-provider avatars can use external hosts that are not known at build time.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={lastCompletedTrip.activeShopper.user.imageUrl} alt="" className="last-visit-avatar" />
+            ) : (
+              <span className="last-visit-avatar avatar-fallback" aria-hidden="true">
+                {(lastCompletedTrip.activeShopper.user?.firstName ?? lastCompletedTrip.activeShopper.approvedEmail).slice(0, 1)}
+              </span>
+            )}
+            <div>
+              <strong>{lastCompletedTrip.store?.name ?? "Any Store"}</strong>
+              <p>{lastCompletedTrip.activeShopper.user?.firstName ?? lastCompletedTrip.activeShopper.approvedEmail} · {formatDaysSince(lastCompletedTrip.completedAt ?? new Date())}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="last-visit-empty">No completed store visits yet.</p>
+        )}
+      </section>
 
       <section className="panel" aria-labelledby="quick-add-heading">
         <h2 id="quick-add-heading">Quick add</h2>

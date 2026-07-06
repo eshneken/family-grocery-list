@@ -433,6 +433,49 @@ export async function getHistory(householdId: string) {
   });
 }
 
+/** Returns the most recently completed trip for the compact request-page visit summary. */
+export async function getLastCompletedTrip(householdId: string) {
+  return prisma.shoppingTrip.findFirst({
+    where: { householdId, status: "completed" },
+    include: { store: true, activeShopper: { include: { user: true } } },
+    orderBy: { completedAt: "desc" }
+  });
+}
+
+/** Formats a completed-trip timestamp by local calendar date, not elapsed 24-hour periods. */
+export function formatDaysSince(completedAt: Date, now = new Date()) {
+  const calendarDate = (date: Date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.max(0, Math.round((calendarDate(now) - calendarDate(completedAt)) / (24 * 60 * 60 * 1000)));
+  if (days === 0) return "Today";
+  return `${days} day${days === 1 ? "" : "s"} ago`;
+}
+
+/** Counts and ranks store visits so the history dashboard can show the household's recent habits. */
+export function summarizeStoreVisits(trips: Array<{ store: { name: string } | null }>) {
+  const visits = new Map<string, number>();
+  for (const trip of trips) {
+    const name = trip.store?.name ?? "Any Store";
+    visits.set(name, (visits.get(name) ?? 0) + 1);
+  }
+  return Array.from(visits, ([name, count]) => ({ name, count }))
+    .sort((left, right) => right.count - left.count || left.name.localeCompare(right.name))
+    .slice(0, 3);
+}
+
+/**
+ * Loads the top stores from a rolling 30-day window without loading every list item.
+ */
+export async function getHistoryDashboard(householdId: string, now = new Date()) {
+  const pastMonth = new Date(now);
+  pastMonth.setDate(pastMonth.getDate() - 30);
+  const recentTrips = await prisma.shoppingTrip.findMany({
+    where: { householdId, status: "completed", completedAt: { gte: pastMonth } },
+    include: { store: true }
+  });
+
+  return { topStores: summarizeStoreVisits(recentTrips) };
+}
+
 /** Groups any category-bearing rows while preserving their source order within each category. */
 export function groupItemsByCategory<T extends { category: string }>(items: T[]) {
   return items.reduce<Record<string, T[]>>((groups, item) => {
