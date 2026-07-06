@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 
+/** Declares install metadata so compatible browsers launch the bookmark in standalone mode. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Family Grocery List",

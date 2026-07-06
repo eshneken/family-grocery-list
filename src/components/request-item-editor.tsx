@@ -14,11 +14,13 @@ type RequestItemEditorProps = {
   recurringStaple: boolean;
 };
 
+/** Compact modal for correcting a pending request's name, category, store, and recurring setting. */
 export function RequestItemEditor({ id, displayName, category, storeId, stores, recurringStaple }: RequestItemEditorProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  /** Closes the native dialog and resets errors left by an unsuccessful server action. */
   const closeDialog = () => {
     dialogRef.current?.close();
     setError(null);

@@ -5,6 +5,7 @@ import { redirectForAuthError } from "@/features/auth/navigation";
 import { getCurrentCollectingList, getShopperView, groupItemsByCategory } from "@/features/shopping/shopping.service";
 import { prisma } from "@/lib/prisma";
 
+/** Renders store selection or the active shopper's compact, store-filtered shopping run. */
 export default async function ShopPage() {
   let shopper;
   try {
@@ -21,6 +22,7 @@ export default async function ShopPage() {
 
   const conflict = activeTrip?.trip.activeShopperId && activeTrip.trip.activeShopperId !== shopper.id;
   const grouped = activeTrip ? groupItemsByCategory(activeTrip.items) : {};
+  // Counts stay scoped to visible store items, matching the rows the shopper can act on.
   const counts = activeTrip
     ? activeTrip.items.reduce(
         (summary, item) => {

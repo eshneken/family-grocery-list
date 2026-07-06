@@ -18,6 +18,14 @@ ENV NEXT_OUTPUT_STANDALONE=true
 COPY . .
 RUN npm run build
 
+# Next.js minifies JavaScript and CSS during `next build`. Verify those compact assets and
+# boot the standalone output before allowing the final production image to consume it.
+FROM builder AS production-verifier
+ENV HOSTNAME=127.0.0.1 \
+  NODE_ENV=production \
+  PORT=3100
+RUN npm run verify:production-build
+
 FROM base AS production-dependencies
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -37,8 +45,8 @@ ENV NODE_ENV=production \
 RUN groupadd --system --gid 1001 nodejs \
   && useradd --system --uid 1001 --gid nodejs nextjs
 
-COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=production-verifier --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=production-verifier --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=production-dependencies --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma

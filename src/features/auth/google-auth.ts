@@ -22,12 +22,18 @@ const profileSchema = z.object({
   picture: z.string().url().optional()
 });
 
+/**
+ * Validates a Google profile and synchronizes it with an approved household membership.
+ * Returning false denies sign-in without exposing whether a particular email is approved.
+ */
 export async function authorizeGoogleProfile(profile: GoogleProfile | undefined) {
   const parsed = profileSchema.safeParse(profile);
   if (!parsed.success) return false;
 
   const email = normalizeEmail(parsed.data.email);
   return prisma.$transaction(async (tx) => {
+    // Keep membership lookup and user-link repair atomic so a valid Google login cannot
+    // observe a half-synchronized profile.
     const household = await tx.household.findFirst({ orderBy: { createdAt: "asc" } });
     if (!household) return false;
 
@@ -86,6 +92,7 @@ export const authOptions: NextAuthOptions = {
   },
   callbacks: {
     async signIn({ account, profile }) {
+      // Only Google is configured; keep the explicit guard if providers are added later.
       if (account?.provider !== "google") return false;
       const approved = await authorizeGoogleProfile(profile as GoogleProfile | undefined);
       return approved || "/unauthorized";
@@ -93,6 +100,7 @@ export const authOptions: NextAuthOptions = {
   }
 };
 
+/** Reads the server-side NextAuth session using the application's Google configuration. */
 export function getGoogleSession() {
   return getServerSession(authOptions);
 }

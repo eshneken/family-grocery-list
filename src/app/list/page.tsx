@@ -6,6 +6,7 @@ import { getCurrentCollectingList, groupItemsByCategory } from "@/features/shopp
 import { getCatalogSuggestions, getCommonSuggestions } from "@/features/shopping/suggestions";
 import { prisma } from "@/lib/prisma";
 
+/** Renders the current request list, its quick-add form, and data-driven suggestions. */
 export default async function ListPage() {
   let requester;
   try {

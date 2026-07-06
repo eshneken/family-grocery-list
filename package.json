@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "ulimit -n 8192 && node scripts/run-next.mjs dev --turbo --hostname 0.0.0.0",
     "build": "next build",
+    "verify:production-build": "node scripts/verify-production-build.mjs",
     "start": "node scripts/run-next.mjs start --hostname 0.0.0.0",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",

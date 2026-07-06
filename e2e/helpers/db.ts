@@ -2,7 +2,9 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+/** Recreates deterministic E2E household data so every browser test starts from the same state. */
 export async function resetE2EDatabase() {
+  // Delete dependents first to make this reset work against the real relational schema.
   await prisma.itemOutcome.deleteMany();
   await prisma.shoppingTrip.deleteMany();
   await prisma.listItem.deleteMany();

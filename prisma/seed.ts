@@ -3,7 +3,9 @@ import { approveMember, createHousehold, defaultStores } from "../src/features/h
 
 const prisma = new PrismaClient();
 
+/** Rebuilds the disposable local-development dataset with known family, catalog, and request state. */
 async function main() {
+  // Delete in dependency order so the seed remains safe against relational constraints.
   await prisma.itemOutcome.deleteMany();
   await prisma.shoppingTrip.deleteMany();
   await prisma.listItem.deleteMany();

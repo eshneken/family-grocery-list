@@ -2,6 +2,8 @@
 
 Application delivery is split between `.github/workflows/application-ci.yml` and `.github/workflows/application.yml`. Terraform owns OCI and the durable cluster foundation. The CI workflow validates feature branches, while the production workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
 
+The production Docker build uses Next.js's built-in production optimizer to minify JavaScript and CSS. Before the final image is assembled, the `production-verifier` stage confirms that generated static assets are compact and boots the standalone server until `/api/health/live` succeeds. This fails the image build before publication if optimization artifacts cannot serve the application.
+
 Documentation: [project README](../README.md) | [OCI infrastructure guide](../infra/README.md) | [cluster foundation](../infra/cluster-foundation/README.md)
 
 ## Branch And Test Flow

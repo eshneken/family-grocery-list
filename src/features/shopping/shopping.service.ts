@@ -10,6 +10,7 @@ const listItemInclude = {
 
 export type ListItemWithRelations = Prisma.ListItemGetPayload<{ include: typeof listItemInclude }>;
 
+/** Returns the open list for a household, creating the first one when needed. */
 export async function getCurrentCollectingList(householdId: string) {
   const list = await prisma.shoppingList.findFirst({
     where: { householdId, status: "collecting" },
@@ -26,6 +27,10 @@ export async function getCurrentCollectingList(householdId: string) {
   return list;
 }
 
+/**
+ * Adds a normalized request to the current list unless an equivalent pending item already exists.
+ * Store-specific duplicates are allowed because they represent different shopping destinations.
+ */
 export async function addRequest(input: {
   householdId: string;
   requestedById: string;
@@ -68,6 +73,7 @@ export async function addRequest(input: {
   });
 }
 
+/** Legacy category-only editor adapter that preserves the item's current name and store. */
 export async function moveListItemCategory(input: {
   householdId: string;
   listItemId: string;
@@ -81,6 +87,10 @@ export async function moveListItemCategory(input: {
   return updateListItem({ ...input, displayName: item.displayName, storeId: item.storeId });
 }
 
+/**
+ * Edits an unshopped request and updates the associated learned catalog record.
+ * The transaction protects the collecting list from duplicate pending names at the same store.
+ */
 export async function updateListItem(input: {
   householdId: string;
   listItemId: string;
@@ -98,6 +108,7 @@ export async function updateListItem(input: {
       }
     });
 
+    // Normalize before the duplicate lookup so visually identical item names cannot diverge.
     const displayName = input.displayName.trim().replace(/\s+/g, " ");
     const storeId = input.storeId === undefined ? item.storeId : input.storeId;
     if (storeId) {
@@ -147,6 +158,7 @@ export async function updateListItem(input: {
           }
         });
 
+    // Preserve the original request wording as an alias when a requestor corrects its display name.
     await tx.groceryAlias.upsert({
       where: {
         groceryItemId_alias: {
@@ -174,6 +186,7 @@ export async function updateListItem(input: {
   });
 }
 
+/** Seeds a new collecting list with recurring catalog staples that are not already represented. */
 export async function seedRecurringStaples(tx: Prisma.TransactionClient, householdId: string, shoppingListId: string) {
   const staples = await tx.groceryItem.findMany({
     where: { householdId, recurringStaple: true }
@@ -210,6 +223,7 @@ export async function seedRecurringStaples(tx: Prisma.TransactionClient, househo
   );
 }
 
+/** Loads the active trip with all relations needed by both the shopper UI and action guards. */
 export async function getActiveTrip(householdId: string) {
   return prisma.shoppingTrip.findFirst({
     where: { householdId, status: "active" },
@@ -221,6 +235,10 @@ export async function getActiveTrip(householdId: string) {
   });
 }
 
+/**
+ * Locks the current list for one shopper, starts its trip, and opens the next collecting list.
+ * The transaction prevents two household members from starting competing shopping runs.
+ */
 export async function startShoppingTrip(input: {
   householdId: string;
   shopperId: string;
@@ -267,6 +285,7 @@ export async function startShoppingTrip(input: {
   });
 }
 
+/** Returns active-trip items visible at the selected store, including generic Any Store requests. */
 export async function getShopperView(householdId: string, storeId?: string | null) {
   const trip = await getActiveTrip(householdId);
   if (!trip) return null;
@@ -277,6 +296,7 @@ export async function getShopperView(householdId: string, storeId?: string | nul
   return { trip, selectedStoreId, items };
 }
 
+/** Records a shopper outcome and updates its list row after verifying the acting shopper owns the trip. */
 export async function markItemOutcome(input: {
   householdId: string;
   itemId: string;
@@ -318,6 +338,10 @@ export async function markItemOutcome(input: {
   });
 }
 
+/**
+ * Completes the active trip and carries unresolved unique requests into the already-open next list.
+ * Carried-forward outcomes preserve the audit trail rather than silently copying pending items.
+ */
 export async function completeShoppingTrip(householdId: string, actorId: string) {
   return prisma.$transaction(async (tx) => {
     const trip = await tx.shoppingTrip.findFirstOrThrow({
@@ -340,6 +364,7 @@ export async function completeShoppingTrip(householdId: string, actorId: string)
       where: { shoppingListId: nextList.id },
       select: { groceryItemId: true, displayName: true, storeId: true }
     });
+    // The grocery-item-or-name plus store key prevents duplicate carry-forwards across list rotations.
     const nextListKeys = new Set(
       nextListExisting.map((item) => `${item.groceryItemId ?? item.displayName.toLowerCase()}::${item.storeId ?? "any"}`)
     );
@@ -394,6 +419,7 @@ export async function completeShoppingTrip(householdId: string, actorId: string)
   });
 }
 
+/** Returns the most recent completed trips with item outcomes for the history screen. */
 export async function getHistory(householdId: string) {
   return prisma.shoppingTrip.findMany({
     where: { householdId, status: "completed" },
@@ -407,6 +433,7 @@ export async function getHistory(householdId: string) {
   });
 }
 
+/** Groups any category-bearing rows while preserving their source order within each category. */
 export function groupItemsByCategory<T extends { category: string }>(items: T[]) {
   return items.reduce<Record<string, T[]>>((groups, item) => {
     groups[item.category] ??= [];
@@ -415,6 +442,7 @@ export function groupItemsByCategory<T extends { category: string }>(items: T[])
   }, {});
 }
 
+/** Formats an optional store relation using the user-facing generic-store label. */
 export function storeLabel(store: Store | null | undefined) {
   return store?.name ?? "Any Store";
 }

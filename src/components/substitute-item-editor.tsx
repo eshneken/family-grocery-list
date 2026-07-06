@@ -4,11 +4,13 @@ import { Replace } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 import { markItemOutcomeAction } from "@/app/actions";
 
+/** Wide mobile-friendly modal for recording what the shopper purchased instead of the request. */
 export function SubstituteItemEditor({ id, displayName }: { id: string; displayName: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  /** Closes the native dialog and clears a prior submission error for the next attempt. */
   const closeDialog = () => {
     dialogRef.current?.close();
     setError(null);

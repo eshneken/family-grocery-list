@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { switchMockUserEmailAction } from "@/app/actions";
 import type { CurrentUser } from "@/features/auth/types";
 
+/** Development-only account picker that mirrors a fresh server render after changing users. */
 export function MockUserSwitcher({
   users,
   currentEmail

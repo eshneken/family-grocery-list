@@ -3,6 +3,7 @@ import { requireCapability } from "@/features/auth/authorization";
 import { redirectForAuthError } from "@/features/auth/navigation";
 import { getHistory, groupItemsByCategory } from "@/features/shopping/shopping.service";
 
+/** Displays completed shopping runs and their resolved or carried-forward item outcomes. */
 export default async function HistoryPage() {
   let requester;
   try {

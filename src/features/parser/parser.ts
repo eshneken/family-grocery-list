@@ -68,10 +68,12 @@ const categoryHints: Array<[string, string]> = [
 const quantityPattern =
   /^((?:\d+(?:\.\d+)?|\bone\b|\btwo\b|\bthree\b|\bfour\b|\bfive\b|\bsix\b|\bhalf\b)\s*(?:x|ct|count|lb|lbs|oz|gallon|gallons|bag|bags|box|boxes|loaf|loaves|dozen)?\s+)/i;
 
+/** Collapses user-entered whitespace so matching and display use one stable representation. */
 export function normalizeWhitespace(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
 
+/** Separates a leading grocery quantity from the item words while retaining the original intent. */
 export function parseQuantity(rawText: string) {
   const normalized = normalizeWhitespace(rawText);
   const match = normalized.match(quantityPattern);
@@ -85,11 +87,16 @@ export function parseQuantity(rawText: string) {
   };
 }
 
+/** Applies deterministic keyword hints when an item has not yet been learned in the catalog. */
 export function inferCategory(itemText: string) {
   const lower = itemText.toLowerCase();
   return categoryHints.find(([hint]) => lower.includes(hint))?.[1] ?? "Other";
 }
 
+/**
+ * Converts free-form request text into a canonical catalog-aware list item.
+ * An explicit store always wins over a learned default so the requestor stays in control.
+ */
 export function normalizeRequest(rawText: string, catalog: CatalogMatch[], explicitStoreId?: string | null): ParsedRequest {
   const raw = normalizeWhitespace(rawText);
   const { quantityText, itemText } = parseQuantity(raw);

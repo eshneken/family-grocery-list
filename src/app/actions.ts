@@ -24,11 +24,13 @@ import { addRequest, completeShoppingTrip, markItemOutcome, moveListItemCategory
 
 const capabilityValues: Capability[] = ["request", "shop", "administer"];
 
+/** Reads a string form field without allowing File values into server-action input. */
 function formString(formData: FormData, key: string) {
   const value = formData.get(key);
   return typeof value === "string" ? value : "";
 }
 
+/** Invalidates every screen that can present shared household and shopping state. */
 async function refreshAll() {
   revalidatePath("/list");
   revalidatePath("/shop");
@@ -36,11 +38,13 @@ async function refreshAll() {
   revalidatePath("/admin");
 }
 
+/** Form adapter for development-only mock-user switching. */
 export async function switchMockUserAction(formData: FormData) {
   const email = formString(formData, "email").trim().toLowerCase();
   await switchMockUserEmailAction(email);
 }
 
+/** Sets the validated mock-user cookie and refreshes all shared views. */
 export async function switchMockUserEmailAction(email: string) {
   if (!isMockAuthEnabled()) throw new Error("Mock user switching is disabled outside mock auth mode.");
   const normalizedEmail = normalizeEmail(email);
@@ -50,12 +54,14 @@ export async function switchMockUserEmailAction(email: string) {
   await refreshAll();
 }
 
+/** Creates the deterministic mock household only when mock auth is explicitly enabled. */
 export async function createHouseholdAction() {
   if (!isMockAuthEnabled()) throw new Error("Request-time household creation is available only in mock auth mode.");
   await ensureSeedHousehold();
   await refreshAll();
 }
 
+/** Validates and grants a household member the capabilities selected by an administrator. */
 export async function approveMemberAction(formData: FormData) {
   const admin = await requireCapability("administer");
   const capabilities = capabilityValues.filter((capability) => formData.get(capability) === "on");
@@ -80,12 +86,14 @@ export async function approveMemberAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+/** Disables a member after verifying the caller has household administration access. */
 export async function disableMemberAction(formData: FormData) {
   await requireCapability("administer");
   await disableMember(formString(formData, "membershipId"));
   revalidatePath("/admin");
 }
 
+/** Toggles an existing member's active state using a small validated status allowlist. */
 export async function setMemberStatusAction(formData: FormData) {
   await requireCapability("administer");
   const status = formString(formData, "status");
@@ -94,6 +102,7 @@ export async function setMemberStatusAction(formData: FormData) {
   revalidatePath("/admin");
 }
 
+/** Updates a member profile and capabilities, then redirects back to the administration screen. */
 export async function updateMemberAction(formData: FormData) {
   await requireCapability("administer");
   const capabilities = capabilityValues.filter((capability) => formData.get(capability) === "on");
@@ -119,12 +128,14 @@ export async function updateMemberAction(formData: FormData) {
   redirect("/admin");
 }
 
+/** Adds a household-local store and refreshes any list or trip that can reference it. */
 export async function addStoreAction(formData: FormData) {
   const admin = await requireCapability("administer");
   await addStore(admin.householdId, formString(formData, "name"));
   await refreshAll();
 }
 
+/** Applies enabled/disabled toggles for all existing stores in the current household. */
 export async function configureStoresAction(formData: FormData) {
   const admin = await requireCapability("administer");
   const stores = await prisma.store.findMany({ where: { householdId: admin.householdId } });
@@ -139,6 +150,7 @@ export async function configureStoresAction(formData: FormData) {
   await refreshAll();
 }
 
+/** Adds a request for an authorized requestor after rejecting blank item text. */
 export async function addRequestAction(formData: FormData) {
   const requester = await requireCapability("request");
   const rawText = formString(formData, "rawText");
@@ -154,6 +166,7 @@ export async function addRequestAction(formData: FormData) {
   await refreshAll();
 }
 
+/** Starts a store-specific run for an authorized shopper. */
 export async function startShoppingTripAction(formData: FormData) {
   const shopper = await requireCapability("shop");
   const storeId = formString(formData, "storeId");
@@ -166,6 +179,7 @@ export async function startShoppingTripAction(formData: FormData) {
   await refreshAll();
 }
 
+/** Retains support for the original category editor while the compact modal is available. */
 export async function moveItemCategoryAction(formData: FormData) {
   const requester = await requireCapability("request");
   const category = formString(formData, "category");
@@ -181,6 +195,7 @@ export async function moveItemCategoryAction(formData: FormData) {
   await refreshAll();
 }
 
+/** Validates and persists the request-editor modal fields, including store and recurring state. */
 export async function updateListItemAction(formData: FormData) {
   const requester = await requireCapability("request");
   const parsed = z
@@ -206,6 +221,7 @@ export async function updateListItemAction(formData: FormData) {
   await refreshAll();
 }
 
+/** Records a purchase, substitution, or rejection for the active shopper's own trip. */
 export async function markItemOutcomeAction(formData: FormData) {
   const shopper = await requireCapability("shop");
   const outcome = formString(formData, "outcome") as Extract<ListItemStatus, "purchased" | "substituted" | "rejected">;
@@ -220,12 +236,14 @@ export async function markItemOutcomeAction(formData: FormData) {
   await refreshAll();
 }
 
+/** Completes the active trip for its shopper and refreshes list, history, and shop views. */
 export async function completeShoppingTripAction() {
   const shopper = await requireCapability("shop");
   await completeShoppingTrip(shopper.householdId, shopper.id);
   await refreshAll();
 }
 
+/** Sets whether a learned catalog item should seed future grocery lists. */
 export async function markRecurringStapleAction(formData: FormData) {
   await requireCapability("request");
   const itemId = formString(formData, "groceryItemId");

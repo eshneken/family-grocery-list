@@ -1,5 +1,9 @@
 const GOOGLE_ENV_KEYS = ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "NEXTAUTH_SECRET", "NEXTAUTH_URL"];
 
+/**
+ * Validates launcher arguments and produces the environment passed to Next.js.
+ * Production is deliberately unable to opt into the test-only mock auth switch.
+ */
 export function resolveLaunchConfig(argv, sourceEnv = process.env) {
   const [command, ...rawArgs] = argv;
   if (command !== "dev" && command !== "start") {
