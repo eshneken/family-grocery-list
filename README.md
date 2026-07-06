@@ -21,7 +21,9 @@ Production authentication federates with Google and authorizes only active house
 - Filters the shopping view to the selected store plus any-store items.
 - Lets shoppers mark items purchased, substituted, or rejected.
 - Carries unresolved pending items forward when a shopping run is completed.
+- Shows the last completed store visit on the request list, including the shopper and calendar-day age.
 - Keeps completed shopping history in expandable runs.
+- Summarizes the household's most-visited stores from the past 30 days.
 - Generates common suggestions from the last 10 completed runs, weighted toward recent trips.
 
 ## Tech Stack
