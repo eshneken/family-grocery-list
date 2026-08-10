@@ -106,6 +106,29 @@ test("iPhone list rows remain compact and install metadata is present", async ({
   expect(await manifest.json()).toMatchObject({ display: "standalone", start_url: "/list" });
 });
 
+test("iPhone Quick Add autocompletes from a case-insensitive word prefix", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/list");
+
+  const quickAdd = page.getByRole("region", { name: "Quick add" });
+  const item = quickAdd.getByRole("combobox", { name: "Item" });
+  const store = quickAdd.locator('select[name="storeId"]');
+  await item.fill("DRESS");
+  const listbox = page.getByRole("listbox", { name: "Grocery suggestions" });
+  await expect(listbox).toBeVisible();
+  expect(await listbox.getByRole("option").count()).toBeLessThanOrEqual(6);
+  await listbox.getByRole("option", { name: /Makoto Ginger Salad Dressing/ }).click();
+
+  await expect(item).toHaveValue("Makoto Ginger Salad Dressing");
+  await expect(store.locator("option:checked")).toHaveText("Giant");
+  await expect(page.locator("article").filter({ hasText: "Makoto Ginger Salad Dressing" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(page.locator("article").filter({ hasText: "Makoto Ginger Salad Dressing" })).toBeVisible();
+  await expect(item).toHaveValue("");
+  await expect(store).toHaveValue("");
+  expect(await page.locator("html").evaluate((element) => element.scrollWidth <= window.innerWidth)).toBe(true);
+});
+
 test("iPhone shopper rows keep purchase direct and secondary actions compact", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/list");
