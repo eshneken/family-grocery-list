@@ -100,6 +100,7 @@ Create a focused `QuickAddCombobox` client component instead of adding state to 
 - Open after the first non-whitespace character and show no more than six results.
 - Selection updates the item input and, when valid, the controlled store select. It does not submit.
 - Manual edits after selection are allowed. A later manual store choice always wins.
+- After a successful Add item submission, reset the item input and store select for the next request. If submission fails, preserve both values so the request can be retried.
 - Close on Escape, outside pointer interaction, successful selection, or an empty normalized query.
 - Support Arrow Up/Down, Enter to select, and Tab without trapping focus.
 
@@ -173,6 +174,7 @@ Playwright at iPhone viewport
 - Enter selects an active result; Enter with no active result retains normal form submission behavior.
 - Manual store changes override the suggested value.
 - Missing/disabled stores leave the current store unchanged.
+- Successful submission clears the item and store controls; failed submission keeps the entered values.
 - Combobox/listbox roles, expanded state, active descendant, labels, and focus behavior are correct.
 - At an iPhone viewport, the popup stays within the screen, rows remain readable, and Safari's 16px input font prevents focus zoom.
 - Common Suggestions still render and add an item.
@@ -199,6 +201,7 @@ Run `npm run lint`, `npm run typecheck`, `npm run test:coverage`, and `npm run e
 | Historical store is disabled/deleted | Do not change the current store selection. |
 | Alias or catalog changes after render | The current snapshot is safe; the next render reflects the change. |
 | No match exists | Keep the user's text and allow normal free-form submission. |
+| Add item submission fails | Keep the entered item and store values available for correction or retry. |
 | Long result text | Truncate visually while retaining the accessible full name. |
 
 ## Deferred scope and upgrade path

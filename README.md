@@ -25,7 +25,7 @@ Production authentication federates with Google and authorizes only active house
 - Keeps completed shopping history in expandable runs.
 - Summarizes the household's most-visited stores from the past 30 days.
 - Generates common suggestions from the last 10 completed runs, weighted toward recent trips.
-- Autocompletes Quick Add locally from a bounded set of successful recent purchases and saved catalog aliases.
+- [Autocompletes Quick Add locally](docs/quick-add-autocomplete-design-plan.md) from a bounded set of successful recent purchases and saved catalog aliases.
 
 ## Tech Stack
 
