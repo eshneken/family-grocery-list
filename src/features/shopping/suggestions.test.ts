@@ -2,7 +2,13 @@ import { afterAll, describe, expect, it } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { addCatalogItem, addTestMember, cleanupTestHousehold, createTestHousehold, type TestHousehold } from "@/test/factories/db";
 import { addRequest, completeShoppingTrip, markItemOutcome, startShoppingTrip } from "./shopping.service";
-import { getCatalogSuggestions, getCommonSuggestions } from "./suggestions";
+import {
+  AUTOCOMPLETE_ALIAS_LIMIT,
+  AUTOCOMPLETE_CANDIDATE_LIMIT,
+  getAutocompleteCandidates,
+  getCatalogSuggestions,
+  getCommonSuggestions
+} from "./suggestions";
 
 const households: TestHousehold[] = [];
 
@@ -21,6 +27,116 @@ afterAll(async () => {
 });
 
 describe("shopping suggestions", () => {
+  it("builds a bounded alias-aware catalog pool while preserving canonical case", async () => {
+    const { testHousehold, giant } = await setupSuggestionHousehold("autocomplete-catalog");
+    const aliases = Array.from({ length: AUTOCOMPLETE_ALIAS_LIMIT + 2 }, (_, index) => `dressing alias ${index}`);
+    await addCatalogItem({
+      householdId: testHousehold.household.id,
+      canonicalName: "Makoto Ginger Salad Dressing",
+      category: "Pantry",
+      storeId: giant.id,
+      recurringStaple: true,
+      aliases
+    });
+    await prisma.groceryItem.createMany({
+      data: Array.from({ length: AUTOCOMPLETE_CANDIDATE_LIMIT + 5 }, (_, index) => ({
+        householdId: testHousehold.household.id,
+        canonicalName: `Catalog Item ${String(index).padStart(2, "0")}`,
+        category: "Other"
+      }))
+    });
+
+    const candidates = await getAutocompleteCandidates(testHousehold.household.id, {
+      currentItems: [],
+      enabledStoreIds: [giant.id]
+    });
+    const dressing = candidates.find((candidate) => candidate.displayName === "Makoto Ginger Salad Dressing")!;
+
+    expect(candidates).toHaveLength(AUTOCOMPLETE_CANDIDATE_LIMIT);
+    expect(dressing.matchTerms).toHaveLength(AUTOCOMPLETE_ALIAS_LIMIT + 1);
+    expect(dressing.storeId).toBe(giant.id);
+  });
+
+  it("uses successful outcomes only and chooses the newest still-enabled historical store", async () => {
+    const { testHousehold, shopper, giant } = await setupSuggestionHousehold("autocomplete-outcomes");
+    const wholeFoods = testHousehold.stores.find((store) => store.name === "Whole Foods")!;
+    await prisma.store.update({ where: { id: wholeFoods.id }, data: { enabled: false } });
+
+    async function completedTrip(label: string, completedAt: Date, storeId: string, statuses: Array<"purchased" | "substituted" | "rejected" | "carried_forward">) {
+      const list = await prisma.shoppingList.create({
+        data: { householdId: testHousehold.household.id, status: "completed", completedAt }
+      });
+      await prisma.listItem.createMany({
+        data: statuses.map((status, index) => ({
+          shoppingListId: list.id,
+          rawText: index === 0 ? label : `${status} item`,
+          displayName: index === 0 ? label : `${status} item`,
+          category: "Other",
+          storeId: null,
+          requestedById: testHousehold.admin.id,
+          status
+        }))
+      });
+      await prisma.shoppingTrip.create({
+        data: {
+          householdId: testHousehold.household.id,
+          shoppingListId: list.id,
+          activeShopperId: shopper.id,
+          storeId,
+          status: "completed",
+          completedAt
+        }
+      });
+    }
+
+    await completedTrip("Favorite Tea", new Date("2026-01-01T12:00:00Z"), giant.id, ["purchased"]);
+    await completedTrip(
+      "Favorite Tea",
+      new Date("2026-01-02T12:00:00Z"),
+      wholeFoods.id,
+      ["substituted", "rejected", "carried_forward"]
+    );
+
+    const candidates = await getAutocompleteCandidates(testHousehold.household.id, {
+      currentItems: [],
+      enabledStoreIds: [giant.id]
+    });
+
+    expect(candidates.find((candidate) => candidate.displayName === "Favorite Tea")).toMatchObject({
+      score: 19,
+      storeId: giant.id
+    });
+    expect(candidates.map((candidate) => candidate.displayName)).not.toContain("rejected item");
+    expect(candidates.map((candidate) => candidate.displayName)).not.toContain("carried_forward item");
+  });
+
+  it("uses supplied current-list identities to exclude canonical and free-form duplicates", async () => {
+    const { testHousehold } = await setupSuggestionHousehold("autocomplete-current-items");
+    const milk = await addCatalogItem({
+      householdId: testHousehold.household.id,
+      canonicalName: "Milk",
+      category: "Dairy"
+    });
+
+    const candidates = await getAutocompleteCandidates(testHousehold.household.id, {
+      currentItems: [{ groceryItemId: milk.id, displayName: "MILK" }]
+    });
+
+    expect(candidates.map((candidate) => candidate.displayName)).not.toContain("Milk");
+  });
+
+  it("collapses catalog names that differ only by case", async () => {
+    const { testHousehold } = await setupSuggestionHousehold("autocomplete-case-dedup");
+    await addCatalogItem({ householdId: testHousehold.household.id, canonicalName: "Coconut Water", category: "Pantry" });
+    await addCatalogItem({ householdId: testHousehold.household.id, canonicalName: "coconut water", category: "Pantry" });
+
+    const candidates = await getAutocompleteCandidates(testHousehold.household.id, { currentItems: [] });
+
+    const matching = candidates.filter((candidate) => candidate.displayName.toLowerCase() === "coconut water");
+    expect(matching).toHaveLength(1);
+    expect(matching[0].displayName).toBe("Coconut Water");
+  });
+
   it("excludes catalog suggestions already on the current list", async () => {
     const { testHousehold } = await setupSuggestionHousehold("catalog-suggestions");
     const milk = await addCatalogItem({

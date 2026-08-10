@@ -373,6 +373,63 @@ textarea {
   min-width: 0;
 }
 
+.autocomplete-control {
+  position: relative;
+}
+
+.autocomplete-control > input {
+  width: 100%;
+}
+
+.autocomplete-listbox {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 312px;
+  overflow-y: auto;
+  padding: 4px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-soft);
+}
+
+.autocomplete-option {
+  display: grid;
+  width: 100%;
+  min-height: 48px;
+  padding: 6px 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text);
+  text-align: left;
+}
+
+.autocomplete-option:hover,
+.autocomplete-option[aria-selected="true"] {
+  background: #e6efea;
+}
+
+.autocomplete-option span,
+.autocomplete-option small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.autocomplete-option span {
+  font-weight: 800;
+}
+
+.autocomplete-option small {
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
 .admin-member-form {
   display: grid;
   grid-template-columns: repeat(3, minmax(160px, 1fr));

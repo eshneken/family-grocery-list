@@ -1,9 +1,10 @@
 import { addRequestAction } from "@/app/actions";
 import { GrocerySection } from "@/components/grocery-section";
+import { QuickAddCombobox } from "@/components/quick-add-combobox";
 import { requireCapability } from "@/features/auth/authorization";
 import { redirectForAuthError } from "@/features/auth/navigation";
 import { formatDaysSince, getCurrentCollectingList, getLastCompletedTrip, groupItemsByCategory } from "@/features/shopping/shopping.service";
-import { getCatalogSuggestions, getCommonSuggestions } from "@/features/shopping/suggestions";
+import { getAutocompleteCandidates } from "@/features/shopping/suggestions";
 import { prisma } from "@/lib/prisma";
 
 /** Renders the current request list, its quick-add form, and data-driven suggestions. */
@@ -20,8 +21,11 @@ export default async function ListPage() {
     prisma.store.findMany({ where: { householdId: requester.householdId, enabled: true }, orderBy: { name: "asc" } }),
     getLastCompletedTrip(requester.householdId)
   ]);
-  const commonSuggestions = await getCommonSuggestions(requester.householdId, list.id);
-  const catalogSuggestions = commonSuggestions.length > 0 ? commonSuggestions : await getCatalogSuggestions(requester.householdId, list.id);
+  const autocompleteCandidates = await getAutocompleteCandidates(requester.householdId, {
+    currentItems: list.items,
+    enabledStoreIds: stores.map((store) => store.id)
+  });
+  const commonSuggestions = autocompleteCandidates.slice(0, 8);
   const grouped = groupItemsByCategory(list.items);
 
   return (
@@ -51,24 +55,7 @@ export default async function ListPage() {
 
       <section className="panel" aria-labelledby="quick-add-heading">
         <h2 id="quick-add-heading">Quick add</h2>
-        <form action={addRequestAction} className="quick-add">
-          <label className="field">
-            Item
-            <input name="rawText" required />
-          </label>
-          <label className="field">
-            Store
-            <select name="storeId" defaultValue="">
-              <option value="">Any Store</option>
-              {stores.map((store) => (
-                <option key={store.id} value={store.id}>
-                  {store.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="primary-button">Add item</button>
-        </form>
+        <QuickAddCombobox action={addRequestAction} candidates={autocompleteCandidates} stores={stores} />
       </section>
 
       {Object.keys(grouped).length === 0 ? (
@@ -82,11 +69,11 @@ export default async function ListPage() {
 
       <section className="panel common-suggestions-panel">
         <h2>Common suggestions</h2>
-        {catalogSuggestions.length === 0 ? (
+        {commonSuggestions.length === 0 ? (
           <p>Suggestions will appear after completed shopping runs. They use the last 10 runs, weighted toward recent trips.</p>
         ) : (
           <div className="store-filter">
-            {catalogSuggestions.map((suggestion) => (
+            {commonSuggestions.map((suggestion) => (
               <form key={`${suggestion.groceryItemId ?? suggestion.displayName}-${suggestion.storeId ?? "any"}`} action={addRequestAction}>
                 <input type="hidden" name="rawText" value={suggestion.displayName} />
                 <input type="hidden" name="storeId" value={suggestion.storeId ?? ""} />

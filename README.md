@@ -25,6 +25,7 @@ Production authentication federates with Google and authorizes only active house
 - Keeps completed shopping history in expandable runs.
 - Summarizes the household's most-visited stores from the past 30 days.
 - Generates common suggestions from the last 10 completed runs, weighted toward recent trips.
+- [Autocompletes Quick Add locally](docs/quick-add-autocomplete-design-plan.md) from a bounded set of successful recent purchases and saved catalog aliases.
 
 ## Tech Stack
 
@@ -108,7 +109,7 @@ gh pr create --base master --fill
 
 4. Wait for the required **Unit tests and coverage** and **Browser E2E tests** checks. Resolve any review conversations, review the diff, and merge the pull request only after both checks pass. Delete the feature branch after merge.
 
-The unit job runs linting, type checks, migrations, and Vitest with enforced minimum coverage of 93.5% statements, 89.5% branches, 93.5% functions, and 94.5% lines. The browser job runs the mock-auth journeys and production Google-auth shell journey against disposable PostgreSQL. GitHub protects `master`, applies these requirements to administrators, blocks direct pushes and force pushes, and requires changes to arrive through a pull request. A second-person approval is not required because this is currently a single-owner repository.
+The unit job runs linting, type checks, migrations, and Vitest with enforced minimum coverage of 95% for statements, branches, functions, and lines. The browser job runs the mock-auth journeys and production Google-auth shell journey against disposable PostgreSQL. GitHub protects `master`, applies these requirements to administrators, blocks direct pushes and force pushes, and requires changes to arrive through a pull request. A second-person approval is not required because this is currently a single-owner repository.
 
 Every non-`master` branch push runs CI without production credentials. GitHub records those required results on the pull request. Because protected `master` accepts only up-to-date pull requests with both checks passing, the merge commit does not rerun the suites; it proceeds directly to the production build and deployment. Infrastructure changes require a separate manual **OCI infrastructure** deployment after merge, as described below.
 
