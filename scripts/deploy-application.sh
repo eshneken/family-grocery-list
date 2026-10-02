@@ -6,6 +6,16 @@ NAMESPACE="${KUBERNETES_NAMESPACE:-grocery}"
 BOOTSTRAP_MARKER="grocery-bootstrap-state"
 BOOTSTRAP_SECRET="grocery-bootstrap-config"
 APP_SECRET="grocery-app-config"
+TIMEOUT_CRONJOB="grocery-shopping-timeout"
+
+suspend_timeout() {
+  local existing
+  existing="$(kubectl --namespace "$NAMESPACE" get cronjob "$TIMEOUT_CRONJOB" --ignore-not-found --output=name)" || return
+  if [[ -n "$existing" ]]; then
+    kubectl --namespace "$NAMESPACE" patch cronjob "$TIMEOUT_CRONJOB" \
+      --type=merge --patch='{"spec":{"suspend":true}}' >/dev/null
+  fi
+}
 
 required=(
   IMAGE_REFERENCE
@@ -42,6 +52,10 @@ fi
 work_dir="$(mktemp -d)"
 bootstrap_secret_created=false
 cleanup() {
+  local exit_status=$?
+  if (( exit_status != 0 )); then
+    suspend_timeout || echo "WARNING: Could not suspend shopping cleanup; check the CronJob before retrying deployment." >&2
+  fi
   rm -rf "$work_dir"
   if [[ "$bootstrap_secret_created" == true ]]; then
     kubectl --namespace "$NAMESPACE" delete secret "$BOOTSTRAP_SECRET" --ignore-not-found >/dev/null 2>&1 || true
@@ -52,6 +66,9 @@ trap cleanup EXIT
 kubectl get namespace "$NAMESPACE" >/dev/null
 kubectl --namespace "$NAMESPACE" get secret database >/dev/null
 kubectl --namespace "$NAMESPACE" get configmap postgres-ca >/dev/null
+# Pause future executions before migrations or image changes. An already-running
+# job may finish; suspension does not cancel its transaction.
+suspend_timeout
 
 render_component() {
   local source_dir="$1"
@@ -164,6 +181,7 @@ render_component deploy/k8s/application "$work_dir/application"
 kubectl apply --filename="$work_dir/application/rendered.yaml" >/dev/null
 
 rollback() {
+  suspend_timeout
   if [[ -z "$previous_image" || "$previous_image" == "$IMAGE_REFERENCE" ]]; then
     echo "No previous application image is available for rollback." >&2
     return
@@ -190,5 +208,8 @@ if ! curl --fail --silent --show-error \
   rollback
   exit 1
 fi
+
+kubectl --namespace "$NAMESPACE" patch cronjob "$TIMEOUT_CRONJOB" \
+  --type=merge --patch='{"spec":{"suspend":false}}' >/dev/null
 
 echo "Application deployment and readiness smoke test passed."
