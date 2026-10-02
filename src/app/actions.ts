@@ -237,9 +237,11 @@ export async function markItemOutcomeAction(formData: FormData) {
 }
 
 /** Completes the active trip for its shopper and refreshes list, history, and shop views. */
-export async function completeShoppingTripAction() {
+export async function completeShoppingTripAction(formData: FormData) {
   const shopper = await requireCapability("shop");
-  await completeShoppingTrip(shopper.householdId, shopper.id);
+  const tripId = formString(formData, "tripId");
+  if (!tripId) throw new Error("Refresh to see the current shopping run.");
+  await completeShoppingTrip(shopper.householdId, shopper.id, tripId);
   await refreshAll();
 }
 

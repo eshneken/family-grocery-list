@@ -1,0 +1,61 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grocery-shopping-timeout
+  namespace: grocery
+  labels:
+    app.kubernetes.io/name: grocery-app
+    app.kubernetes.io/component: shopping-timeout
+spec:
+  # Deployment enables scheduling only after rollout and external readiness pass.
+  suspend: true
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 900
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: shopping-timeout
+              image: grocery-app-image
+              imagePullPolicy: IfNotPresent
+              command: ["npm", "run", "shopping:expire"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: database
+                      key: DATABASE_URL
+              volumeMounts:
+                - name: postgres-ca
+                  mountPath: /var/run/postgres-ca
+                  readOnly: true
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+                  memory: 256Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+          volumes:
+            - name: postgres-ca
+              configMap:
+                name: postgres-ca

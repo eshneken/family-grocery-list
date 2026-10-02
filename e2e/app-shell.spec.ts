@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
-import { resetE2EDatabase } from "./helpers/db";
+import { ageActiveShoppingTrip, resetE2EDatabase } from "./helpers/db";
+import { expireShoppingTrips } from "../src/features/shopping/shopping.service";
 
 test.beforeEach(async ({ context }) => {
   await resetE2EDatabase();
@@ -11,6 +12,52 @@ test.beforeEach(async ({ context }) => {
       path: "/"
     }
   ]);
+});
+
+test("automatic completion preserves purchases, moves unfinished items, and permits a new run", async ({ page }) => {
+  await page.goto("/list");
+  await page.getByRole("combobox", { name: "Item", exact: true }).fill("Milk");
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(page.getByRole("combobox", { name: "Item", exact: true })).toHaveValue("");
+  await page.getByRole("combobox", { name: "Item", exact: true }).fill("Apples");
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(page.getByRole("combobox", { name: "Item", exact: true })).toHaveValue("");
+  await page.goto("/shop");
+  await page.getByRole("button", { name: "Start shopping" }).click();
+  const purchase = page.getByRole("button", { name: /^Mark .* purchased$/ }).first();
+  await expect(purchase).toBeVisible();
+  await purchase.click();
+  await expect(page.locator(".summary-card").filter({ hasText: "Purchased" }).locator("strong")).toHaveText("1");
+  await ageActiveShoppingTrip();
+  expect((await expireShoppingTrips()).completed).toBe(1);
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Choose a store" })).toBeVisible();
+  await page.goto("/history");
+  await expect(page.getByText("Automatically completed after 4 hours")).toBeVisible();
+  await expect(page.getByText("1 purchased", { exact: true })).toBeVisible();
+  await page.goto("/list");
+  await expect(page.locator("article").first()).toBeVisible();
+  await page.goto("/shop");
+  await page.getByRole("button", { name: "Start shopping" }).click();
+  await expect(page.getByRole("button", { name: "Complete shopping run" })).toBeVisible();
+});
+
+test("a shopper can start over an overdue run before the scheduled sweep", async ({ page }) => {
+  await page.goto("/list");
+  await page.getByRole("combobox", { name: "Item", exact: true }).fill("Apples");
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(page.getByRole("combobox", { name: "Item", exact: true })).toHaveValue("");
+  await page.goto("/shop");
+  await page.getByRole("button", { name: "Start shopping" }).click();
+  await expect(page.getByRole("button", { name: "Complete shopping run" })).toBeVisible();
+  await ageActiveShoppingTrip();
+  await page.reload();
+  await expect(page.getByText(/The previous run is over four hours old/)).toBeVisible();
+  await page.getByRole("button", { name: "Start shopping" }).click();
+  await expect(page.getByText(/The previous run is over four hours old/)).toBeHidden();
+  await expect(page.getByRole("button", { name: "Complete shopping run" })).toBeVisible();
+  await page.goto("/history");
+  await expect(page.getByText("Automatically completed after 4 hours")).toBeVisible();
 });
 
 test("opens the requestor list as the first screen", async ({ page }) => {

@@ -190,6 +190,7 @@ model ShoppingTrip {
   status           ShoppingTripStatus @default(active)
   startedAt        DateTime           @default(now())
   completedAt      DateTime?
+  completionReason String             @default("manual")
 
   household     Household   @relation(fields: [householdId], references: [id], onDelete: Cascade)
   shoppingList  ShoppingList @relation(fields: [shoppingListId], references: [id], onDelete: Restrict)
@@ -197,6 +198,7 @@ model ShoppingTrip {
   store         Store?       @relation(fields: [storeId], references: [id], onDelete: SetNull)
 
   @@index([householdId, status])
+  @@index([status, startedAt])
 }
 
 model ItemOutcome {

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "shopping:expire": "tsx src/jobs/expire-shopping.ts",
     "dev": "ulimit -n 8192 && node scripts/run-next.mjs dev --turbo --hostname 0.0.0.0",
     "build": "next build",
     "verify:production-build": "node scripts/verify-production-build.mjs",

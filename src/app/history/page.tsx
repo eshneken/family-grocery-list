@@ -57,6 +57,7 @@ export default async function HistoryPage() {
                 <span>
                   <strong>{trip.store?.name ?? "Store"}</strong>
                   <small>{trip.completedAt?.toLocaleDateString() ?? "Completed"} · {trip.activeShopper.user?.firstName ?? trip.activeShopper.approvedEmail}</small>
+                  {trip.completionReason === "timeout" ? <small>Automatically completed after 4 hours</small> : null}
                 </span>
                 <span className="history-summary-actions">
                   <span className="status-badge status-purchased">{purchased} purchased</span>
