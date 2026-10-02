@@ -10,6 +10,13 @@ const listItemInclude = {
 
 export type ListItemWithRelations = Prisma.ListItemGetPayload<{ include: typeof listItemInclude }>;
 
+export const SHOPPING_TIMEOUT_MS = 4 * 60 * 60 * 1000;
+
+/** Serialize run starts, outcomes, and completion for a household across app/job processes. */
+async function lockShoppingHousehold(tx: Prisma.TransactionClient, householdId: string) {
+  await tx.$queryRaw`SELECT "id" FROM "Household" WHERE "id" = ${householdId} FOR UPDATE`;
+}
+
 /** Returns the open list for a household, creating the first one when needed. */
 export async function getCurrentCollectingList(householdId: string) {
   const list = await prisma.shoppingList.findFirst({
@@ -38,38 +45,44 @@ export async function addRequest(input: {
   storeId?: string | null;
   notes?: string;
 }) {
-  const [collectingList, catalog] = await Promise.all([
-    getCurrentCollectingList(input.householdId),
-    prisma.groceryItem.findMany({
+  return prisma.$transaction(async (tx) => {
+    await lockShoppingHousehold(tx, input.householdId);
+    const include = { items: { include: listItemInclude, orderBy: { createdAt: "asc" as const } } };
+    const collectingList = await tx.shoppingList.findFirst({
+      where: { householdId: input.householdId, status: "collecting" }, include
+    }) ?? await tx.shoppingList.create({
+      data: { householdId: input.householdId, status: "collecting" }, include
+    });
+    const catalog = await tx.groceryItem.findMany({
       where: { householdId: input.householdId },
       include: { aliases: true, defaultStore: true }
-    })
-  ]);
+    });
 
-  const parsed = normalizeRequest(input.rawText, catalog, input.storeId);
-  const duplicate = collectingList.items.find((item) => {
-    const sameName = item.displayName.toLowerCase() === parsed.displayName.toLowerCase();
-    const sameStore = (item.storeId ?? null) === (parsed.storeId ?? null);
-    return sameName && sameStore && item.status === "pending";
-  });
+    const parsed = normalizeRequest(input.rawText, catalog, input.storeId);
+    const duplicate = collectingList.items.find((item) => {
+      const sameName = item.displayName.toLowerCase() === parsed.displayName.toLowerCase();
+      const sameStore = (item.storeId ?? null) === (parsed.storeId ?? null);
+      return sameName && sameStore && item.status === "pending";
+    });
 
-  if (duplicate) {
-    return duplicate;
-  }
+    if (duplicate) {
+      return duplicate;
+    }
 
-  return prisma.listItem.create({
-    data: {
-      shoppingListId: collectingList.id,
-      groceryItemId: parsed.groceryItemId,
-      rawText: parsed.rawText,
-      displayName: parsed.displayName,
-      quantityText: parsed.quantityText,
-      category: parsed.category,
-      storeId: parsed.storeId,
-      requestedById: input.requestedById,
-      notes: input.notes
-    },
-    include: listItemInclude
+    return tx.listItem.create({
+      data: {
+        shoppingListId: collectingList.id,
+        groceryItemId: parsed.groceryItemId,
+        rawText: parsed.rawText,
+        displayName: parsed.displayName,
+        quantityText: parsed.quantityText,
+        category: parsed.category,
+        storeId: parsed.storeId,
+        requestedById: input.requestedById,
+        notes: input.notes
+      },
+      include: listItemInclude
+    });
   });
 }
 
@@ -100,6 +113,7 @@ export async function updateListItem(input: {
   recurringStaple: boolean;
 }) {
   return prisma.$transaction(async (tx) => {
+    await lockShoppingHousehold(tx, input.householdId);
     const item = await tx.listItem.findFirstOrThrow({
       where: {
         id: input.listItemId,
@@ -245,6 +259,8 @@ export async function startShoppingTrip(input: {
   storeId?: string | null;
 }) {
   return prisma.$transaction(async (tx) => {
+    await lockShoppingHousehold(tx, input.householdId);
+    await finishShoppingTrip(tx, input.householdId, { reason: "timeout", now: new Date() });
     const activeTrip = await tx.shoppingTrip.findFirst({
       where: { householdId: input.householdId, status: "active" },
       include: { activeShopper: { include: { user: true } }, store: true }
@@ -305,17 +321,21 @@ export async function markItemOutcome(input: {
   note?: string;
   substituteText?: string;
 }) {
-  const trip = await getActiveTrip(input.householdId);
-  if (!trip || trip.activeShopperId !== input.actorId) {
-    throw new Error("Only the active shopper can update this trip.");
-  }
-
-  const item = trip.shoppingList.items.find((candidate) => candidate.id === input.itemId);
-  if (!item) {
-    throw new Error("This item is not part of the active shopping trip.");
-  }
-
   return prisma.$transaction(async (tx) => {
+    await lockShoppingHousehold(tx, input.householdId);
+    const trip = await tx.shoppingTrip.findFirst({
+      where: { householdId: input.householdId, status: "active" },
+      include: { shoppingList: { include: { items: true } } }
+    });
+    if (!trip || trip.activeShopperId !== input.actorId) {
+      throw new Error("Only the active shopper can update this trip. The run may have ended; refresh to see the current list.");
+    }
+
+    const item = trip.shoppingList.items.find((candidate) => candidate.id === input.itemId);
+    if (!item) {
+      throw new Error("This item is not part of the active shopping trip.");
+    }
+
     await tx.itemOutcome.create({
       data: {
         listItemId: input.itemId,
@@ -342,16 +362,30 @@ export async function markItemOutcome(input: {
  * Completes the active trip and carries unresolved unique requests into the already-open next list.
  * Carried-forward outcomes preserve the audit trail rather than silently copying pending items.
  */
-export async function completeShoppingTrip(householdId: string, actorId: string) {
+export async function completeShoppingTrip(householdId: string, actorId: string, tripId?: string) {
   return prisma.$transaction(async (tx) => {
-    const trip = await tx.shoppingTrip.findFirstOrThrow({
+    await lockShoppingHousehold(tx, householdId);
+    return (await finishShoppingTrip(tx, householdId, { reason: "manual", actorId, tripId, now: new Date() }))!;
+  });
+}
+
+/** Shared finalizer; callers must hold the household lock for the entire transaction. */
+async function finishShoppingTrip(tx: Prisma.TransactionClient, householdId: string, options: {
+  reason: "manual" | "timeout"; actorId?: string; tripId?: string; now: Date;
+}) {
+    const trip = await tx.shoppingTrip.findFirst({
       where: { householdId, status: "active" },
       include: {
         shoppingList: { include: { items: true } }
       }
     });
 
-    if (trip.activeShopperId !== actorId) {
+    if (options.reason === "timeout" && (!trip || trip.startedAt.getTime() > options.now.getTime() - SHOPPING_TIMEOUT_MS)) return null;
+    if (!trip || (options.tripId && options.tripId !== trip.id)) {
+      throw new Error("This shopping run has already ended. Refresh to see the current list.");
+    }
+    const actorId = trip.activeShopperId;
+    if (options.reason === "manual" && actorId !== options.actorId) {
       throw new Error("Only the active shopper can complete this trip.");
     }
 
@@ -377,12 +411,12 @@ export async function completeShoppingTrip(householdId: string, actorId: string)
             listItemId: item.id,
             outcome: "carried_forward",
             actorId,
-            note: "Moved to next list"
+            note: options.reason === "timeout" ? "Automatically moved to next list after 4 hours" : "Moved to next list"
           }
         });
         await tx.listItem.update({
           where: { id: item.id },
-          data: { status: "carried_forward", outcomeAt: new Date() }
+          data: { status: "carried_forward", outcomeAt: options.now }
         });
         if (nextListKeys.has(key)) return;
         nextListKeys.add(key);
@@ -404,11 +438,11 @@ export async function completeShoppingTrip(householdId: string, actorId: string)
 
     await tx.shoppingTrip.update({
       where: { id: trip.id },
-      data: { status: "completed", completedAt: new Date() }
+      data: { status: "completed", completedAt: options.now, completionReason: options.reason }
     });
     await tx.shoppingList.update({
       where: { id: trip.shoppingListId },
-      data: { status: "completed", completedAt: new Date() }
+      data: { status: "completed", completedAt: options.now }
     });
 
     return {
@@ -416,7 +450,28 @@ export async function completeShoppingTrip(householdId: string, actorId: string)
       carriedForwardCount: pendingItems.length,
       completedCount: trip.shoppingList.items.length - pendingItems.length
     };
+}
+
+/** Bounded indexed sweep. Recheck each candidate under a lock so retries cannot carry twice. */
+export async function expireShoppingTrips(now = new Date(), batchSize = 100) {
+  const candidates = await prisma.shoppingTrip.findMany({
+    where: { status: "active", startedAt: { lte: new Date(now.getTime() - SHOPPING_TIMEOUT_MS) } },
+    orderBy: [{ startedAt: "asc" }, { id: "asc" }],
+    take: batchSize,
+    select: { id: true, householdId: true }
   });
+  let completed = 0;
+  for (const candidate of candidates) {
+    const result = await prisma.$transaction(async (tx) => {
+      await lockShoppingHousehold(tx, candidate.householdId);
+      // Only consider the candidate found by this sweep, never a replacement run.
+      const active = await tx.shoppingTrip.findFirst({ where: { id: candidate.id, status: "active" } });
+      if (!active) return null;
+      return finishShoppingTrip(tx, candidate.householdId, { reason: "timeout", now });
+    });
+    if (result) completed += 1;
+  }
+  return { scanned: candidates.length, completed };
 }
 
 /** Returns the most recent completed trips with item outcomes for the history screen. */

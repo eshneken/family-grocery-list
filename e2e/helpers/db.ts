@@ -2,6 +2,14 @@ import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
+/** Advances only the fixture run's age without waiting four hours or changing browser clocks. */
+export async function ageActiveShoppingTrip() {
+  await prisma.shoppingTrip.updateMany({
+    where: { status: "active" },
+    data: { startedAt: new Date(Date.now() - 4 * 60 * 60 * 1000 - 1000) }
+  });
+}
+
 /** Recreates deterministic E2E household data so every browser test starts from the same state. */
 export async function resetE2EDatabase() {
   // Delete dependents first to make this reset work against the real relational schema.

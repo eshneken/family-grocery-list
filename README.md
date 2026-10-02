@@ -1,5 +1,7 @@
 # Family Grocery List
 
+Shopping runs automatically complete after approximately four hours, with unfinished requests moved to the next list. See [Shopping session timeout](docs/shopping-session-timeout.md) for timing, deployment, and testing details.
+
 Family Grocery List is a responsive web app for collecting, organizing, shopping, and reviewing a household grocery list. It is built for a shared family workflow where requestors add items, shoppers run store-specific trips, and admins manage household access and store configuration.
 
 Production authentication federates with Google and authorizes only active household memberships whose stored Gmail address matches Google's verified email claim. Local development and E2E can explicitly enable the retained mock provider.

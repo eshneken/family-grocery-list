@@ -135,13 +135,16 @@ Do not create the marker manually. If PostgreSQL is deliberately replaced while 
 
 ## Routine Deployment
 
+The application resources also include the [shopping-session timeout CronJob](../docs/shopping-session-timeout.md). It uses the deployed image and runs every 15 minutes to complete sessions at least four hours old. This is the application's first recurring Kubernetes task; migration and bootstrap Jobs remain deployment-triggered.
+
 For every later `master` commit, the workflow:
 
 1. Publishes and attests the immutable image.
-2. Applies pending Prisma migrations through the in-cluster migration Job.
+2. Suspends shopping cleanup and applies pending Prisma migrations through the in-cluster migration Job.
 3. Detects `grocery-bootstrap-state` and skips all initialization.
 4. Applies the Deployment with the new digest.
 5. Waits for readiness and performs an HTTPS smoke test.
+6. Enables the shopping cleanup CronJob only after both checks pass. Any deployment failure leaves cleanup suspended.
 
 Migrations must follow expand/contract compatibility. A failed application rollout restores the previous image, but a successful database migration is not rolled back automatically. Destructive schema removal belongs in a later release after old application versions can no longer reference it.
 

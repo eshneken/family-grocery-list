@@ -2,7 +2,7 @@ import { completeShoppingTripAction, startShoppingTripAction } from "@/app/actio
 import { GrocerySection } from "@/components/grocery-section";
 import { requireCapability } from "@/features/auth/authorization";
 import { redirectForAuthError } from "@/features/auth/navigation";
-import { getCurrentCollectingList, getShopperView, groupItemsByCategory } from "@/features/shopping/shopping.service";
+import { getCurrentCollectingList, getShopperView, groupItemsByCategory, SHOPPING_TIMEOUT_MS } from "@/features/shopping/shopping.service";
 import { prisma } from "@/lib/prisma";
 
 /** Renders store selection or the active shopper's compact, store-filtered shopping run. */
@@ -21,6 +21,7 @@ export default async function ShopPage() {
   ]);
 
   const conflict = activeTrip?.trip.activeShopperId && activeTrip.trip.activeShopperId !== shopper.id;
+  const overdue = Boolean(activeTrip && activeTrip.trip.startedAt.getTime() <= Date.now() - SHOPPING_TIMEOUT_MS);
   const grouped = activeTrip ? groupItemsByCategory(activeTrip.items) : {};
   // Counts stay scoped to visible store items, matching the rows the shopper can act on.
   const counts = activeTrip
@@ -39,10 +40,11 @@ export default async function ShopPage() {
         <h1 className="eyebrow">Shopper Mode</h1>
       </header>
 
-      {!activeTrip ? (
+      {!activeTrip || overdue ? (
         <section className="panel">
           <h2>Choose a store</h2>
-          {collectingList.items.length === 0 ? <p>No items are ready to shop yet. Add requests from the List tab first.</p> : null}
+          {overdue ? <p>The previous run is over four hours old. Starting shopping will complete it and move unfinished items into this run.</p> : null}
+          {collectingList.items.length === 0 && !overdue ? <p>No items are ready to shop yet. Add requests from the List tab first.</p> : null}
           {stores.length === 0 ? <p>No stores are enabled. Add or enable a store from Admin first.</p> : null}
           <form action={startShoppingTripAction} className="store-filter start-shopping-form">
             {stores.map((store, index) => (
@@ -52,13 +54,14 @@ export default async function ShopPage() {
               </label>
             ))}
             <div className="start-shopping-action">
-              <button className="primary-button" disabled={collectingList.items.length === 0 || stores.length === 0}>
+              <button className="primary-button" disabled={(!overdue && collectingList.items.length === 0) || stores.length === 0}>
                 Start shopping
               </button>
             </div>
           </form>
         </section>
-      ) : conflict ? (
+      ) : null}
+      {activeTrip && !overdue && conflict ? (
         <section className="empty-state" aria-live="polite">
           <h2>
             {activeTrip.trip.activeShopper.user?.firstName ?? activeTrip.trip.activeShopper.approvedEmail} is already shopping at{" "}
@@ -66,7 +69,8 @@ export default async function ShopPage() {
           </h2>
           <p>Only one active shopper can run the locked list at a time.</p>
         </section>
-      ) : (
+      ) : null}
+      {activeTrip && !conflict ? (
         <>
           <section className="panel">
             <h2>{activeTrip.trip.store?.name ?? "Store"} run</h2>
@@ -89,6 +93,7 @@ export default async function ShopPage() {
               </div>
             </div>
             <form action={completeShoppingTripAction} className="complete-shopping-form">
+              <input type="hidden" name="tripId" value={activeTrip.trip.id} />
               <button className="primary-button">Complete shopping run</button>
             </form>
           </section>
@@ -102,7 +107,7 @@ export default async function ShopPage() {
             Object.entries(grouped).map(([category, items]) => <GrocerySection key={category} title={category} items={items} shopperActions />)
           )}
         </>
-      )}
+      ) : null}
     </main>
   );
 }
