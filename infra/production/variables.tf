@@ -18,19 +18,9 @@ variable "oci_auth" {
   default     = "ApiKey"
 }
 
-variable "dns_zone_name" {
-  type = string
-}
-
-variable "dns_zone_compartment_ocid" {
-  description = "Compartment that owns the public OCI DNS zone. Defaults to the tenancy root compartment."
-  type        = string
-  default     = null
-  nullable    = true
-}
-
 variable "app_hostname" {
-  type = string
+  description = "Public application hostname managed by an external DNS provider, such as GoDaddy."
+  type        = string
 
   validation {
     condition     = can(regex("^[a-z0-9][a-z0-9.-]+[a-z0-9]$", var.app_hostname))
@@ -38,7 +28,6 @@ variable "app_hostname" {
   }
 }
 
-variable "dns_ttl" { default = 300 }
 variable "vcn_cidr" { default = "10.40.0.0/16" }
 variable "lb_subnet_cidr" { default = "10.40.0.0/24" }
 variable "oke_endpoint_subnet_cidr" { default = "10.40.1.0/28" }

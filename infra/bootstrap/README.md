@@ -27,6 +27,6 @@ terraform init -migrate-state -backend-config=backend.hcl
 
 The OCI provider uses its standard local authentication chain. Use an OCI CLI session token or profile locally; do not put an OCI API private key in this repository. Object Storage uses OCI-managed encryption for Terraform state. The software-protected Vault key exists only to encrypt application secrets such as the PostgreSQL administrator password.
 
-Before enabling the GitHub workflow, create an OCI IAM workload identity provider for `https://token.actions.githubusercontent.com` and restrict its claims to the repository, `master`, and the `production-infra` environment. The final policy must be limited to the application compartment, the state bucket, the Vault key, and the root-compartment DNS zone.
+Before enabling the GitHub workflow, create an OCI IAM workload identity provider for `https://token.actions.githubusercontent.com` and restrict its claims to the repository, `master`, and the `production-infra` environment. The final policy must be limited to the application compartment, the state bucket, and the Vault key, with read-only tenancy discovery permissions as documented in the infrastructure overview. DNS is hosted externally and does not require OCI DNS management permissions.
 
 Next: configure and apply the [production OCI environment](../production/README.md).

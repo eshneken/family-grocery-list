@@ -3,6 +3,7 @@ graph TB
     direction LR
     Browser["Household users<br/>Web browser"]
     GHA["GitHub Actions<br/>Terraform + app delivery"]
+    DNS["GoDaddy DNS<br/>Manual A record to reserved IP"]
   end
 
   subgraph OCI["OCI tenancy - us-ashburn-1"]
@@ -10,7 +11,6 @@ graph TB
 
     subgraph Root["Root compartment"]
       direction LR
-      DNS["OCI DNS<br/>grocery hostname"]
       IAM["Default identity domain<br/>GitHub OIDC trust"]
     end
 
@@ -81,7 +81,8 @@ graph TB
   classDef subnetLabel fill:#f8fafc,stroke:#0284c7,color:#082f49,stroke-dasharray:3 3;
 
   class Browser,GHA actor;
-  class IAM,DNS,State,Vault,Volume,Gateways managed;
+  class IAM,State,Vault,Volume,Gateways managed;
+  class DNS external;
   class LB,API,Bastion public;
   class Worker,Caddy,App private;
   class Postgres data;

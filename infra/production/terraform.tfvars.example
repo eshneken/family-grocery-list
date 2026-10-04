@@ -1,9 +1,7 @@
 tenancy_ocid              = "ocid1.tenancy.oc1..replace-me"
 compartment_ocid          = "ocid1.compartment.oc1..replace-me"
 region                    = "replace-with-oci-region"
-dns_zone_name             = "replace-with-dns-zone-name"
 app_hostname              = "replace-with-app-hostname"
-dns_zone_compartment_ocid = "ocid1.tenancy.oc1..replace-me"
 
 # Pick a currently supported OKE version in your selected region before applying.
 oke_kubernetes_version   = "v1.36.0"

@@ -86,6 +86,8 @@ The local and production clients represent the same application, so they can and
    Never commit the client secret or place it in a GitHub variable. GitHub does not expose an existing secret value, so updating these names safely replaces the prior local-client credentials.
 10. Confirm `INITIAL_ADMIN_EMAIL` in the same GitHub environment is the exact Gmail address that will sign in. The application's database allowlist remains the authorization boundary even though Google's basic sign-in scopes do not require the account to be listed as an OAuth test user.
 
+Public DNS is hosted externally at GoDaddy. After infrastructure creates or changes the reserved load balancer IP, [manually update the hostname’s A record](../infra/production/README.md#external-dns-setup-godaddy) using the production `reserved_public_ip` output. Caddy manages certificate issuance and renewal without DNS-provider credentials.
+
 Before starting or rerunning a production deployment, verify DNS and TLS reach Caddy rather than a localhost service:
 
 ```bash

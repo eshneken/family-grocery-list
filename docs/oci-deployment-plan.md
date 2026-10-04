@@ -11,7 +11,7 @@ This plan defines the infrastructure-as-code and delivery pipelines for deployin
 | OCI region | Supplied through ignored Terraform variables |
 | Compartment | Existing application compartment supplied as an input |
 | Production URL | `https://<app-hostname>` supplied through ignored Terraform variables |
-| DNS | Existing OCI DNS zone supplied through ignored Terraform variables; its owning compartment is explicit |
+| DNS | External DNS zone (GoDaddy); manually point the application A record to Terraform’s reserved load balancer IP |
 | Environments | Production only; development and staging remain local |
 | Application authentication | Google OAuth with an explicit user allowlist; mock authentication cannot be deployed publicly |
 | OKE control plane | Public API endpoint secured with GitHub OIDC claims and Kubernetes RBAC |
@@ -50,7 +50,7 @@ The existing `prisma` package is a development dependency and there is no produc
     |
     | HTTPS <app-hostname>
     v
- OCI DNS A record
+ External DNS A record (GoDaddy)
     |
     v
  Reserved public IPv4
@@ -137,9 +137,8 @@ The application connection string must include `sslmode=verify-full` and the CA 
 | Variable | Default | Notes |
 |---|---:|---|
 | `region` | required local input | Deployment region |
-| `tenancy_ocid` | required | Also identifies the root compartment for DNS lookup |
+| `tenancy_ocid` | required | OCI tenancy identity |
 | `compartment_ocid` | required | Existing app compartment |
-| `dns_zone_name` | required local input | Existing zone; Terraform does not create or replace it |
 | `app_hostname` | required local input | Production URL and Google OAuth callback base |
 | `acme_email` | required | Let's Encrypt account notifications |
 | `github_repository` | `eshneken/family-grocery-list` | Used in OIDC claim restrictions |
@@ -215,7 +214,7 @@ infra/
 Ownership boundaries:
 
 - `bootstrap`: remote state bucket, bucket versioning, KMS vault/key, and narrowly scoped state access policy.
-- `production`: OCI network, NSGs, OKE, managed node pool, PostgreSQL, Vault secret, Bastion, reserved public IP, and DNS record.
+- `production`: OCI network, NSGs, OKE, managed node pool, PostgreSQL, Vault secret, Bastion, and reserved public IP. External DNS records are updated manually.
 - `cluster-foundation`: long-lived Kubernetes resources that are infrastructure rather than application releases: namespace, deploy RBAC, PostgreSQL CA ConfigMap, database Secret, Caddy Deployment/configuration/PVC, and external LoadBalancer Service.
 - `deploy/`: application Deployment, internal Service, migration Job template, and production Kustomize overlay. These are promoted by the application pipeline.
 
@@ -275,7 +274,7 @@ Required WIF permissions:
 
 - Manage resources only in the existing app compartment.
 - Read the tenancy and availability domains required by Terraform data sources.
-- Read the existing root-compartment DNS zone and manage records only for the selected zone.
+- No OCI DNS permissions are required; DNS is hosted externally.
 - Read/write/delete objects only in the Terraform state bucket.
 - Use only the project KMS key.
 - No tenancy administrator policy and no persistent OCI API signing key in GitHub.
@@ -480,7 +479,7 @@ Quarterly recovery verification should restore the latest PostgreSQL backup to a
 | Single OKE worker fails | Temporary outage during node replacement | Accepted risk; node health alarm |
 | Single PostgreSQL node fails | Database outage until service recovers node | Accepted risk; backup and restore drill |
 | Bastion session expires | pgAdmin connection closes without exposing DB | Expected short-lived administrative access |
-| DNS record points to wrong IP | HTTPS and OAuth fail | Terraform DNS assertion and post-apply lookup |
+| DNS record points to wrong IP | HTTPS and OAuth fail | Manual external A-record update and post-apply lookup |
 
 ## 17. Test Plan for the Infrastructure and Pipelines
 
@@ -537,7 +536,7 @@ Lanes A, B, and C can begin in parallel. Lane D starts after the OKE/network out
 - [ ] **T2 (P1)** Add live and ready health endpoints with tests.
 - [ ] **T3 (P1)** Add a multi-stage, non-root, multi-architecture production Dockerfile, package the pinned Prisma migration tooling, add `db:migrate:deploy`, and add a container health test.
 - [ ] **T4 (P1)** Implement Terraform bootstrap with encrypted, versioned, locking OCI remote state.
-- [ ] **T5 (P1)** Implement production Terraform for network, NSGs, OKE managed A1 node, PostgreSQL, Vault, DNS, Bastion, and reserved IP.
+- [ ] **T5 (P1)** Implement production Terraform for network, NSGs, OKE managed A1 node, PostgreSQL, Vault, Bastion, and reserved IP; document the manual external DNS update.
 - [ ] **T6 (P1)** Implement cluster-foundation Terraform for RBAC, Caddy, PVC, DB configuration, and LoadBalancer Service.
 - [ ] **T7 (P1)** Add application manifests and a one-shot Prisma migration Job.
 - [ ] **T8 (P1)** Add static infrastructure CI and manually approved WIF-backed Terraform apply.
@@ -564,7 +563,7 @@ Before implementation, verify:
 
 - The selected app compartment has quota for one A1 instance, one flexible LB, one PostgreSQL E5 Flex node, a Bastion, KMS/Vault, and block volumes in IAD.
 - `PostgreSQL.VM.Standard.E5.Flex`, PostgreSQL 16, 1 OCPU/16 GB, and 75K IOPS are available in IAD.
-- The existing DNS zone can be managed by the WIF principal without granting broad root-compartment administration.
+- The external DNS A record matches the production reserved public IP; no OCI zone lookup or record management remains.
 - GitHub environment protection and required reviewers are enabled for this public repository.
 - The WIF token exchange works with the Terraform OCI provider version selected during implementation.
 - The Service annotations for reserved IP, Flexible LB bandwidth, NSGs, and TCP backend protocol are validated against the current OKE cloud-controller-manager version.

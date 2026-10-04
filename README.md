@@ -58,9 +58,18 @@ Production authentication federates with Google and authorizes only active house
 
 ## OCI Architecture
 
-![Family Grocery List logical architecture on OCI](diagrams/oci-logical-architecture.png)
+```mermaid
+flowchart LR
+    Browser[Household browsers] -->|DNS lookup| DNS[GoDaddy DNS]
+    DNS -->|Manual A record| IP[Reserved OCI public IP]
+    Browser -->|HTTPS| LB[OCI load balancer]
+    IP --- LB
+    LB --> Caddy[Caddy pod and certificate PVC]
+    Caddy --> App[Next.js app]
+    App --> DB[Private OCI PostgreSQL]
+```
 
-The diagram shows the production network and service boundaries, runtime request path, GitHub Actions delivery path, and supporting managed services. Its editable sources are available as [Mermaid](diagrams/oci-logical-architecture.mmd) and [Excalidraw](diagrams/oci-logical-architecture.excalidraw); a vector [SVG](diagrams/oci-logical-architecture.svg) is also included.
+Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at GoDaddy. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The checked-in PNG, SVG, and Excalidraw exports are historical snapshots from before the external-DNS migration.
 
 ## Logical Data Model
 
@@ -120,7 +129,7 @@ Every non-`master` branch push runs CI without production credentials. GitHub re
 Production runs in OCI and is managed by the manual **OCI infrastructure** GitHub Actions workflow. Terraform is split into three ordered roots:
 
 1. [`infra/bootstrap`](infra/bootstrap/README.md) creates the versioned Object Storage state bucket plus the Vault and software key used for application secrets.
-2. [`infra/production`](infra/production/README.md) creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, DNS, and the reserved public IP.
+2. [`infra/production`](infra/production/README.md) creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, and the reserved public IP. Public DNS is hosted externally at GoDaddy and is [updated manually](infra/production/README.md#external-dns-setup-godaddy) to point to that IP.
 3. [`infra/cluster-foundation`](infra/cluster-foundation/README.md) creates the Kubernetes namespace, database connection material, Caddy, its persistent certificate volume, and the public OCI load balancer.
 
 To add or update OCI infrastructure:

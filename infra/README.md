@@ -3,7 +3,7 @@
 This directory contains OCI infrastructure for the Family Grocery List production environment. Deployment-specific values, including region and hostnames, are supplied only through ignored local Terraform variable files.
 
 - [`bootstrap/`](bootstrap/README.md): one-time state bucket, Vault, and software key for application secrets. Start with local state, then migrate it to the bucket it creates.
-- [`production/`](production/README.md): VCN, security groups, OKE managed A1 worker, private OCI PostgreSQL, Vault secret, Bastion, reserved public IP, and the public DNS record.
+- [`production/`](production/README.md): VCN, security groups, OKE managed A1 worker, private OCI PostgreSQL, Vault secret, Bastion, reserved public IP. Public DNS is hosted externally (currently GoDaddy).
 - [`cluster-foundation/`](cluster-foundation/README.md): Kubernetes namespace, PostgreSQL connection material, Caddy, persistent certificate state, and the OCI load-balancer Service.
 
 Return to the [project README](../README.md). Application releases remain a separate follow-on workflow documented in the [application deployment guide](../deploy/README.md). These roots create the OCI environment and durable Kubernetes foundation but do not deploy the application image.
@@ -15,7 +15,7 @@ Terraform is split because each stage depends on outputs or APIs created by the 
 | Root | Owns | State key |
 | --- | --- | --- |
 | [`bootstrap`](bootstrap/README.md) | Object Storage state bucket, Vault, software key | `bootstrap/terraform.tfstate` |
-| [`production`](production/README.md) | VCN, gateways, subnets, NSGs, OKE, A1 node pool, PostgreSQL, Bastion, DNS, reserved public IP | `production/terraform.tfstate` |
+| [`production`](production/README.md) | VCN, gateways, subnets, NSGs, OKE, A1 node pool, PostgreSQL, Bastion, reserved public IP | `production/terraform.tfstate` |
 | [`cluster-foundation`](cluster-foundation/README.md) | `grocery` namespace, database Secret/CA, Caddy, PVC, `LoadBalancer` Service, LB display name | `cluster-foundation/terraform.tfstate` |
 
 The state bucket is private and versioned. GitHub passes its namespace, the Vault/key OCIDs, and the OKE cluster OCID between jobs rather than storing those dynamic values as repository variables. Terraform state contains sensitive generated values, including the PostgreSQL password; never commit, upload, or print state.
@@ -63,11 +63,10 @@ Create the deployment policy in the root compartment. Replace `hm` if the applic
 
 ```text
 Allow group family-grocery-github-deployers to manage all-resources in compartment hm
-Allow group family-grocery-github-deployers to manage dns in tenancy
 Allow group family-grocery-github-deployers to read all-resources in tenancy
 ```
 
-The tenancy-wide permissions support the existing root-compartment DNS zone and discovery APIs such as OKE worker images. Resource creation remains limited to the application compartment.
+The tenancy-wide read permission supports discovery APIs such as OKE worker images. Resource creation remains limited to the application compartment. External DNS is updated manually; the deployment principal does not need tenancy-wide DNS management permission. Remove any old `manage dns in tenancy` grant dedicated to this deployment.
 
 ### 2. Create The Runtime OAuth Client
 
@@ -218,8 +217,6 @@ OCI_TENANCY_OCID
 OCI_COMPARTMENT_OCID
 OCI_REGION
 OCI_STATE_BUCKET_NAME
-OCI_DNS_ZONE_NAME
-OCI_DNS_ZONE_COMPARTMENT_OCID
 OCI_APP_HOSTNAME
 OCI_OKE_KUBERNETES_VERSION
 OCI_NODE_AVAILABILITY_DOMAIN
@@ -252,8 +249,11 @@ The deployment group also needs these existing statements:
 
 ```text
 Allow group family-grocery-github-deployers to manage all-resources in compartment hm
-Allow group family-grocery-github-deployers to manage dns in tenancy
 ```
+
+## External DNS (GoDaddy)
+
+Terraform reserves the load balancer IPv4 address but does not manage the DNS zone or records. After production Terraform creates the address, follow the [manual GoDaddy setup](production/README.md#external-dns-setup-godaddy) before Caddy certificate validation. Repeat this step whenever infrastructure recreation changes the reserved IP. Routine updates that retain the reserved IP do not require a DNS change.
 
 ## Applying Infrastructure Updates
 
@@ -275,7 +275,7 @@ terraform -chdir=infra/cluster-foundation validate
 6. Open a pull request and review the Terraform changes, especially replacements and deletes. Merge to `master` only after review.
 7. Open **Actions** > **OCI infrastructure** > **Run workflow**, select `deploy`, and leave `confirm_destroy` blank.
 8. Watch all three jobs. If a stage fails, fix the configuration and rerun `deploy`; completed resources and remote state are reused.
-9. Confirm the run succeeds and perform relevant service checks. For the current stack:
+9. Confirm the external DNS A record matches the production `reserved_public_ip` output, then confirm the run succeeds and perform relevant service checks. For the current stack:
 
 ```bash
 kubectl --kubeconfig "$HOME/.kube/family-grocery" get nodes
@@ -524,8 +524,10 @@ Destroy is for deliberate full-environment resets, not routine deployments. It p
 - The PostgreSQL system and all application data.
 - OKE and the managed worker.
 - The Caddy block volume, ACME account, and certificate cache.
-- VCN resources, Bastion, DNS record, reserved public IP, and load balancer.
+- VCN resources, Bastion, reserved public IP, and load balancer.
 - The versioned Terraform state bucket, Vault, and software key.
+
+External DNS records survive destroy and must be updated or removed manually; recreating the environment may allocate a different reserved IP.
 
 Before approving destroy, take any required database backup and confirm that recreating TLS state will not cause ACME rate-limit problems. Then:
 
