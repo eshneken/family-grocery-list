@@ -1,0 +1,113 @@
+# OCI Always Free execution checkpoints
+
+Implementation began October 5, 2026. Current checkpoint: **1 — prepare and verify GitHub-to-OCI federation**. Infrastructure provisioning is blocked on the migration branch until the replacement Terraform is implemented and reviewed.
+
+## Recorded baseline and completed preparation
+
+- Implementation branch: `codex/oci-always-free`.
+- Legacy configuration: local master commit `813968f6f46a152ed355b9dfcf7492cf03130080`; separate detached checkout at `/private/tmp/grocery-legacy-813968f`. The SHA is the durable reference; the temporary checkout can be recreated if removed. Never point it at the new backend.
+- Remote master remains at `072092b6d724401177f56fdc1e1d09ebe5fa22e7`; the DNS-removal commit is included in the new branch, not pushed to master. Publish/reconcile the legacy DNS-removal configuration before eventual old teardown as described in the design. No old deployment was triggered by pushing master.
+- Last successful master application workflow: [run 37017249003](https://github.com/eshneken/family-grocery-list/actions/runs/37017249003), October 2, source `072092b6d724401177f56fdc1e1d09ebe5fa22e7`.
+- Registry image for that release: `ghcr.io/eshneken/family-grocery-list@sha256:b4273f744ba1320af6091c830a93a3544e859b06e1fa0cebceafd1980ee2ed99`; ARM64 manifest `sha256:b73d5e702fdec3888f1170aa09d20ea26ad52ad166c16c4133c943356225f3d8`. This identifies the registry release; verify the actual running deployment and capture old Terraform state securely before cutover.
+- New GitHub environment `always-free` created, deployment branch restriction set to exactly `codex/oci-always-free`.
+- Eight non-secret environment variables set: tenancy OCID, compartment OCID, region, WIF domain URL, WIF audience, Kubernetes version, new state bucket name, rehearsal hostname. Old `production` settings retain their existing values.
+- Branch federation workflow now validates the expected new tenancy/compartment/domain and namespace. This test does not create cloud infrastructure or deploy the app.
+- Bootstrap helper target/secret-handling tests and workflow isolation checks passed locally. Live federation cannot be tested until the manual identity setup below is complete.
+
+## Checkpoint 1 — manual operator steps
+
+### 1. Confirm account status
+
+Sign into tenancy **edfreetier**, region **Ashburn**. The dismissed banner is not needed: check **Billing & Cost Management → Upgrade and Manage Payment**, and the Console billing/account widget for any trial balance/days remaining. Record whether it is active Free Trial, Always Free only, or PAYG, plus the displayed trial end date if present. Do not perform an account upgrade as part of this checkpoint. Current record: newly created October 5; exact status unverified. [Oracle payment/account page](https://docs.oracle.com/en-us/iaas/Content/Billing/Tasks/changingpaymentmethod.htm), [billing widget](https://docs.oracle.com/en-us/iaas/Content/GSG/Concepts/console_topic-AccountCenter-Billing.htm)
+
+### 2. Create the deployment user, group, and policy
+
+In **Identity & Security → Domains → Default**, verify the domain URL is:
+
+```text
+https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443
+```
+
+Create a service user named `grocery-github-deployer`, following any required email/user fields in the Console. Record its **OCI user OCID**, which starts with `ocid1.user.`. Create group `grocery-github-deployers` and add this user. It needs no API key and should not be an Administrators-group member.
+
+Create an IAM policy named `grocery-github-deployment` in the **root compartment** with:
+
+```text
+Allow group 'Default'/'grocery-github-deployers' to manage all-resources in compartment grocery
+Allow group 'Default'/'grocery-github-deployers' to read all-resources in tenancy
+```
+
+This follows the existing deployment model: writes within the application compartment, tenancy reads for discovery. Tenancy-level backup dynamic groups/tag setup will be handled as a separate administrator prerequisite. No OCI DNS permission is needed. [Oracle domain/group policy syntax](https://docs.oracle.com/en-us/iaas/Content/Identity/policysyntax/subject.htm)
+
+Verify the user is in the group, the policy belongs to the new tenancy, and its writable compartment is `grocery`.
+
+### 3. Create the runtime OAuth application
+
+In the same Default domain, create a **Confidential Application** under **Integrated applications**, named `grocery-github-actions`:
+
+1. Configure it as a client now.
+2. Enable the **Client credentials** grant.
+3. Leave administrator app roles disabled.
+4. Finish and activate it.
+5. Save its client ID and client secret securely. This is the **runtime** client used by GitHub.
+
+### 4. Create the temporary administrator application and trust
+
+Create a second Confidential Application named `grocery-wif-bootstrap-admin`. Enable **Client credentials**, assign **Identity Domain Administrator** using **Add app roles** and the **Me** setting described in the existing [WIF bootstrap procedure](../infra/README.md#3-create-a-temporary-administrator-client), finish, and activate. Save its client ID/secret locally. Its secret must never be a GitHub secret.
+
+From the migration checkout, run this helper using the three non-secret identifiers you recorded:
+
+```bash
+python3 scripts/bootstrap-always-free-wif.py \
+  --runtime-client-id '<runtime-client-id>' \
+  --service-user-ocid '<new-service-user-OCI-OCID>' \
+  --admin-client-id '<temporary-admin-client-id>'
+```
+
+It verifies `EDFREETIER` and the compartment before looking up the service user's identity-domain ID. It prompts for the temporary admin secret with hidden terminal input and creates one trust. No passwords or tokens are printed or passed as command-line arguments. It refuses to overwrite an existing trust; after a timeout/unknown result, rerun to detect an existing trust and inspect it before proceeding.
+
+Expected result: a nonempty trust ID, name `grocery-always-free-github-actions`, and `active: true`. The accepted issuer is GitHub, audience `grocery-always-free-github`, and subject exactly:
+
+```text
+repo:eshneken/family-grocery-list:environment:always-free
+```
+
+The helper does not provision OKE or a database. It creates an OCI identity-domain trust under the administrator credentials you enter. An optional offline preview uses `--dry-run --service-user-id '<identity-domain-ID>'` instead of the administrator client argument.
+
+### 5. Complete the three missing GitHub settings
+
+Open [Settings → Environments → always-free](https://github.com/eshneken/family-grocery-list/settings/environments). Confirm the permitted deployment branch is `codex/oci-always-free`. Add:
+
+| Type | Name | Value |
+|---|---|---|
+| Environment variable | `OCI_WIF_CLIENT_ID` | Runtime OAuth client ID |
+| Environment variable | `OCI_WIF_SERVICE_USER_OCID` | New service user's OCI OCID |
+| Environment secret | `OCI_WIF_CLIENT_SECRET` | **Runtime** OAuth client secret |
+
+The domain URL, audience, tenancy, compartment, and region are already set. Enter the runtime secret directly into GitHub or with `gh secret set OCI_WIF_CLIENT_SECRET --env always-free` using its interactive prompt. Do not paste either client secret into chat. No Google OAuth settings are needed at this checkpoint.
+
+### 6. Verify federation
+
+Tell Codex when steps 1–5 are complete; it can dispatch and inspect the verification. You can also run:
+
+```bash
+gh workflow run oci-wif-verify.yml --ref codex/oci-always-free
+gh run list --workflow oci-wif-verify.yml --branch codex/oci-always-free --limit 1
+```
+
+Or select the existing federation verification workflow under Actions, **Run workflow**, and choose the migration branch. Default-branch UI may still display the old workflow name; select the file `oci-wif-verify.yml`.
+
+Pass criteria: summary **Always-free OCI federation verification passed**, target `EDFREETIER / grocery / us-ashburn-1`, namespace `iddiywf0v4j6`, and green verification job. This proves token exchange and read-only namespace access; it does not yet prove Terraform write permissions, Basic OKE access, free billing, or backup node identity.
+
+After the verification passes, deactivate/delete the temporary administrator application. Keep the runtime application active. Record account status and successful workflow URL in this document; never record secret values.
+
+## Following checkpoints
+
+1. **Current:** identity setup and federation verification.
+2. **Infrastructure implementation/review:** target-bound bootstrap and Basic OKE Terraform; shared PVC/PostgreSQL; private networking and public API restrictions; backup instance-principal IAM; review plans before apply.
+3. **Provision target:** verify one A1, IMDSv1 disabled at launch, version/image, eligible disk/LB allocation, Lens access; manually point rehearsal DNS and configure rehearsal Google OAuth.
+4. **Rehearsal restore:** restore source data, prove app/auth/shopping, shared storage, backups and recovery.
+5. **Cutover:** operator scheduling, frozen final transfer, manual GoDaddy production DNS update, production verification.
+6. **Acceptance/retirement:** shopping run and rollback hold, approved old Terraform destruction, then merge and verify master against the new environment.
+
+Use the [full design/runbook](oci-always-free-design.md) for the exact data-transfer, rollback, and destruction hold points. Do not dispatch the branch infrastructure workflow at checkpoint 1: it intentionally fails without accessing a deployment environment.

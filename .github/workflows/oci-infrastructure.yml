@@ -39,7 +39,18 @@ env:
   TF_VAR_caddy_acme_email: ${{ vars.CADDY_ACME_EMAIL }}
 
 jobs:
+  migration-checkpoint:
+    name: Infrastructure provisioning is not yet enabled
+    if: github.ref == 'refs/heads/codex/oci-always-free'
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - run: |
+          echo 'Complete federation checkpoint first. This branch does not yet contain the Always Free infrastructure implementation.' >&2
+          exit 1
+
   validate:
+    if: github.ref == 'refs/heads/master'
     name: Validate production configuration
     runs-on: ubuntu-latest
     environment: production
