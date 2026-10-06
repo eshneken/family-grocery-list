@@ -162,5 +162,15 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - State bucket is private Standard storage with versioning enabled; backup bucket is private Standard storage with versioning disabled. Vault is `DEFAULT / ACTIVE`; key is `SOFTWARE / ENABLED`.
 - Bootstrap state migrated successfully to `grocery-always-free-tfstate/bootstrap/terraform.tfstate`; remote object existence verified. Administrator IAM state remains private/local and must be backed up securely.
 - [Application CI run 37508862432](https://github.com/eshneken/family-grocery-list/actions/runs/37508862432) passed after final workflow/IAM changes.
-- Backup-only image publication dispatched through the existing application workflow, with application build/deployment skipped. New standalone workflows cannot be dispatched until present on the default branch.
+- [Backup-only image build 37508882814](https://github.com/eshneken/family-grocery-list/actions/runs/37508882814) passed; application build/deployment were skipped. Anonymous pull and ARM64/AMD64 manifests verified. `OCI_BACKUP_IMAGE` now pins `ghcr.io/eshneken/family-grocery-list-backup@sha256:d6f52f516585688c8b34f5a6c3498f0ed1f1829657adc86f19ec50e966a6a43e`. No package-visibility manual step was needed.
 - First OKE plan dispatch exposed a GitHub expression-scope validation error (`runner.temp` in job-level environment); moved it into step-level environment before retrying. No OKE/Compute/LB resources have been created and no data has been migrated.
+
+- GitHub infrastructure planning successfully authenticated through federation and read the migrated bootstrap state. Runner portability and provider string-valued boot-size issues were corrected; the exact 50 GB boundary remains enforced with regression coverage.
+- Initial complete platform plan: **62 create, 0 change, 0 destroy**, including one Basic cluster, one A1 2/12 worker, 50 GB boot disk, IMDSv1 disabled, private worker/pod networking with NAT/Service gateways, public API, reserved LB IP, and Vault database secrets/TLS. No managed database, Bastion, or second worker is proposed. The shared 50 GiB claim and 10 Mbps LB are created later by the foundation stage.
+- [Final guarded platform plan 37511939579](https://github.com/eshneken/family-grocery-list/actions/runs/37511939579) **passed** at implementation commit `2e25809`; 62 creations, zero changes/deletions. Cluster provisioning is the next operator checkpoint. Full application CI was green at the preceding prerequisite implementation; subsequent runner/plan-guard fixes passed focused checks, with normal branch CI also scheduled.
+
+### Next operator checkpoint
+
+1. In the EDFREETIER tenancy, verify the two private buckets in `grocery` and the `DEFAULT` Vault/software key. Do not change production DNS yet.
+2. Securely back up `.always-free/terraform/tenancy-identity/terraform.tfstate` outside this checkout. It contains administrator IAM state; bootstrap/application state is remote in the new private bucket.
+3. Next authorized stage: apply the reviewed platform plan through GitHub, then verify the actual single worker/IMDS settings and Lens access before foundation storage/load-balancer installation. Physical A1 capacity can only be established during provisioning.
