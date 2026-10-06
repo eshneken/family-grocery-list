@@ -52,7 +52,7 @@ else
   printf 'terraform {\n  backend "oci" {}\n}\n' > "$work_dir/backend.tf"
 fi
 backend_args=(-input=false)
-if rg -q 'backend "oci"' "$work_dir/backend.tf"; then
+if grep -q 'backend "oci"' "$work_dir/backend.tf"; then
   backend_args=(-input=false -backend-config="bucket=$TF_VAR_state_bucket_name" -backend-config="namespace=$namespace" -backend-config="key=$stage/terraform.tfstate" -backend-config="region=us-ashburn-1" -backend-config="auth=$auth" -backend-config="config_file_profile=$profile")
 fi
 terraform -chdir="$work_dir" init "${backend_args[@]}"
