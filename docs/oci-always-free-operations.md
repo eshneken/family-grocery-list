@@ -2,7 +2,7 @@
 
 Current stage: implementation/review, **no cloud provisioning yet**. Federation passed. The migration branch uses only `EDFREETIER / grocery / us-ashburn-1`; the old environment/master remain intact.
 
-## Next manual checkpoint: recovery key and contact settings
+## Recovery key and contact settings (completed for this migration)
 
 1. Deactivate/delete the temporary `grocery-wif-bootstrap-admin` integrated application. Keep `grocery-github-actions` active. The unused regular `grocery-github-deployer` user can be deleted; federation uses `grocery-github-service`.
 2. Supply the ACME contact email to set `CADDY_ACME_EMAIL` in GitHub `always-free`.
@@ -32,7 +32,7 @@ From the migration checkout:
 
 The helper stages only tracked Terraform source and lockfiles into ignored private `.always-free/terraform/ROOT` directories. It never reads old root-local ignored tfvars, backend configuration or state. It verifies the authenticated new namespace before planning. Plans contain generated secret material and stay private; do not upload them as Actions artifacts.
 
-Expected administrator plan: one defined tag namespace/key, one worker dynamic group and one narrow backup-object IAM policy. Expected bootstrap plan: two private buckets (state versioned, backups non-versioned), DEFAULT Vault and SOFTWARE key. No OKE/Compute/LB is created at this stage.
+Expected administrator plan: one defined tag namespace/key, one worker dynamic group and one narrow IAM policy for backup objects and deployer use of the backup tag namespace. Expected bootstrap plan: two private buckets (state versioned, backups non-versioned), DEFAULT Vault and SOFTWARE key. No OKE/Compute/LB is created at this stage.
 
 After review and with a clean committed checkout, set `CONFIRM_APPLY_SHA` to the full reviewed migration commit and run the same root with `apply`. The apply command regenerates/checks the plan; stop if it differs materially from what was reviewed. Initial bootstrap uses private local state, then migrates itself to `grocery-always-free-tfstate`. Retain the local recovery copy until remote state is verified. The administrator IAM root deliberately stays in private local state; securely back up that state separately.
 
@@ -48,7 +48,7 @@ After accepting the plan, select `apply` with the full reviewed commit SHA. Veri
 
 ## Backup image and foundation
 
-Run **Build PostgreSQL backup image** from the branch. If the new GHCR package initially defaults to private, make only `family-grocery-list-backup` public in Packages settings, then rerun anonymous-pull verification. Set its immutable index digest as `OCI_BACKUP_IMAGE` in `always-free`; verify ARM64 exists. The image contains PostgreSQL 16 tools, age and the OCI SDK, with instance-principal authentication.
+Run **Application Always Free deployment** (`application.yml`) from `codex/oci-always-free`, selecting operation **build-backup-only**. This builds only the backup image and skips application deployment; using the existing workflow also permits dispatch before the migration branch is merged. If the new GHCR package initially defaults to private, make only `family-grocery-list-backup` public in Packages settings, then rerun anonymous-pull verification. Set its immutable index digest as `OCI_BACKUP_IMAGE` in `always-free`; verify ARM64 exists. The image contains PostgreSQL 16 tools, age and the OCI SDK, with instance-principal authentication.
 
 Run the infrastructure workflow's `cluster-foundation` plan/apply after review. Expected: one retained `platform-data` 50 GiB ReadWriteOnce claim, PostgreSQL and Caddy on the same worker/subdirectories, internal verified DB TLS, one fixed 10/10 Mbps LB with TCP 80/443 listeners/backends, and a **suspended** daily backup CronJob. Verify actual volume size/performance and both simultaneous mounts, ownership separation, Pod readiness and Node Allocatable. No live application data has been transferred yet.
 

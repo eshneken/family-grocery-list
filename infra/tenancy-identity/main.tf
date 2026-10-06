@@ -29,5 +29,7 @@ resource "oci_identity_policy" "backup" {
   compartment_id = "ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua"
   name           = "grocery-backup-objects"
   description    = "Backup upload, listing and pruning; no content reads or state access"
-  statements     = ["Allow dynamic-group grocery-backup-workers to manage objects in compartment grocery where all {target.bucket.name='grocery-always-free-backups', any {request.permission='OBJECT_CREATE', request.permission='OBJECT_INSPECT', request.permission='OBJECT_DELETE'}}"]
+  statements = ["Allow dynamic-group grocery-backup-workers to manage objects in compartment grocery where all {target.bucket.name='grocery-always-free-backups', any {request.permission='OBJECT_CREATE', request.permission='OBJECT_INSPECT', request.permission='OBJECT_DELETE'}}",
+    "Allow group 'Default'/'grocery-github-deployers' to use tag-namespaces in tenancy where target.tag-namespace.name='grocery-backup'",
+  ]
 }

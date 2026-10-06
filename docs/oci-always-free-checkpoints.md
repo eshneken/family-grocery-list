@@ -1,6 +1,6 @@
 # OCI Always Free execution checkpoints
 
-Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application cleanup remains a manual operator step. Next checkpoint: **2 — infrastructure implementation/review**. Replacement Terraform and workflow implementation is underway; no infrastructure has been applied. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
+Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Next checkpoint: **2 — infrastructure implementation/review**. Replacement Terraform and workflow implementation passed validation and application CI; prerequisite provisioning is the next step. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
 
 ## Recorded baseline and completed preparation
 
@@ -125,11 +125,11 @@ After the verification passes, deactivate/delete the temporary administrator app
 - Added the service user to `grocery-github-deployers`, replaced the existing trust's impersonation mapping, and updated the `always-free` GitHub variable `OCI_WIF_SERVICE_USER_OCID`. Removed the regular user from the deployment group; the regular account remains available for manual deletion.
 - Bootstrap helper now rejects a regular user before requesting the administrator token. Seven helper tests pass. Initial branch application CI [run 37381389786](https://github.com/eshneken/family-grocery-list/actions/runs/37381389786) passed unit/coverage and browser checks.
 - Retry [run 37397391548](https://github.com/eshneken/family-grocery-list/actions/runs/37397391548): **passed**. Token exchange succeeded, namespace matched `iddiywf0v4j6`, and the new-tenancy guard and verification record steps passed. No infrastructure or application was deployed. Terraform write permissions and backup instance-principal permissions remain for subsequent checkpoints.
-- **Manual cleanup:** deactivate/delete `grocery-wif-bootstrap-admin`; keep `grocery-github-actions` active. The unused regular account `grocery-github-deployer` may be deleted manually; it has been removed from the deployment group.
+- **Cleanup verified October 6:** `grocery-wif-bootstrap-admin` is inactive through the identity-domain API; keep `grocery-github-actions` active. The unused regular account `grocery-github-deployer` may be deleted manually; it has been removed from the deployment group.
 
 ## Following checkpoints
 
-1. **Passed:** identity setup and federation verification; temporary administrator app cleanup pending.
+1. **Passed:** identity setup and federation verification; temporary administrator app deactivation verified October 6.
 2. **Infrastructure implementation/review:** target-bound bootstrap and Basic OKE Terraform; shared PVC/PostgreSQL; private networking and public API restrictions; backup instance-principal IAM; review plans before apply.
 3. **Provision target:** verify one A1, IMDSv1 disabled at launch, version/image, eligible disk/LB allocation, Lens access; manually point rehearsal DNS and configure rehearsal Google OAuth.
 4. **Rehearsal restore:** restore source data, prove app/auth/shopping, shared storage, backups and recovery.
@@ -152,6 +152,6 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - Target-bound administrator plan: **4 create, 0 change, 0 destroy** (backup tag namespace/key, dynamic group, narrow policy).
 - Target-bound bootstrap plan: **4 create, 0 change, 0 destroy** (state bucket, backup bucket, DEFAULT Vault, SOFTWARE key). Both passed the plan guard; neither was applied.
 - All four Terraform roots validated in isolated source-only working directories; shell/YAML checks and 12 Python checks passed.
-- [CI run 37507131234](https://github.com/eshneken/family-grocery-list/actions/runs/37507131234) passed actual pinned PostgreSQL TLS/role/dump/restore integration and backup-tool image build. Existing deployment scheduling mocks needed updating for the new backup/active-job checks; final application CI is being rerun after that correction.
+- [CI run 37507593734](https://github.com/eshneken/family-grocery-list/actions/runs/37507593734): all three jobs passed (unit tests/coverage, browser journeys, and actual pinned PostgreSQL TLS/role/dump/restore integration plus backup-tool image build).
 - ACME contact set to `eshneken@gmail.com`; public backup recipient set to `age1gqkvgjanavu7usylugw39sqcdsf970k696c9y9e42jl0wmjvrp7sx5v08e`. The private recovery key was generated/stored by the operator and was never read by Codex or uploaded to OCI/GitHub.
 - Reviewed initial ARM image and AD-1 recorded in GitHub variables; requery service options before actual provisioning. A1 physical capacity remains untested.

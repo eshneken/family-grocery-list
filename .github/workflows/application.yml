@@ -6,6 +6,11 @@ on:
       - master
   workflow_dispatch:
     inputs:
+      operation:
+        type: choice
+        default: deploy-application
+        options: [deploy-application, build-backup-only]
+        description: Deploy the application or only publish the backup tool image.
       deployment_mode:
         type: choice
         default: restore-existing
@@ -26,6 +31,7 @@ concurrency:
 
 jobs:
   container:
+    if: inputs.operation != 'build-backup-only'
     name: Build and publish release image
     runs-on: ubuntu-latest
     timeout-minutes: 45
@@ -156,3 +162,36 @@ jobs:
             echo '- Migrations: applied in OKE before rollout'
             echo '- Readiness: passed through public HTTPS endpoint'
           } >> "$GITHUB_STEP_SUMMARY"
+
+  backup-image:
+    name: Build and publish PostgreSQL backup image
+    if: inputs.operation == 'build-backup-only' && (github.ref == 'refs/heads/codex/oci-always-free' || github.ref == 'refs/heads/master')
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4.2.0
+      - uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5 # v4.1.0
+      - uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee # v4.2.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: deploy/backup
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ghcr.io/${{ github.repository }}-backup:${{ github.sha }}
+      - name: Verify public pull and record image
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}-backup@${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker logout ghcr.io >/dev/null
+          docker buildx imagetools inspect "$IMAGE" >/dev/null || { echo 'Make the backup package public, then rerun.' >&2; exit 1; }
+          echo "Set OCI_BACKUP_IMAGE in always-free to: $IMAGE" >> "$GITHUB_STEP_SUMMARY"
