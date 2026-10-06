@@ -1,6 +1,6 @@
 # OCI Always Free execution checkpoints
 
-Implementation began October 5, 2026. Current checkpoint: **1 — prepare and verify GitHub-to-OCI federation**. Infrastructure provisioning is blocked on the migration branch until the replacement Terraform is implemented and reviewed.
+Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application cleanup remains a manual operator step. Next checkpoint: **2 — infrastructure implementation/review**. Infrastructure provisioning is blocked on the migration branch until the replacement Terraform is implemented and reviewed.
 
 ## Recorded baseline and completed preparation
 
@@ -12,13 +12,13 @@ Implementation began October 5, 2026. Current checkpoint: **1 — prepare and ve
 - New GitHub environment `always-free` created, deployment branch restriction set to exactly `codex/oci-always-free`.
 - Eight non-secret environment variables set: tenancy OCID, compartment OCID, region, WIF domain URL, WIF audience, Kubernetes version, new state bucket name, rehearsal hostname. Old `production` settings retain their existing values.
 - Branch federation workflow now validates the expected new tenancy/compartment/domain and namespace. This test does not create cloud infrastructure or deploy the app.
-- Bootstrap helper target/secret-handling tests and workflow isolation checks passed locally. Live federation cannot be tested until the manual identity setup below is complete.
+- Bootstrap helper target/secret-handling tests and workflow isolation checks passed locally. Initial live verification identified a regular user instead of a service user; the correction and verification outcome are recorded below.
 
 ## Checkpoint 1 — manual operator steps
 
 ### 1. Confirm account status
 
-Sign into tenancy **edfreetier**, region **Ashburn**. The dismissed banner is not needed: check **Billing & Cost Management → Upgrade and Manage Payment**, and the Console billing/account widget for any trial balance/days remaining. Record whether it is active Free Trial, Always Free only, or PAYG, plus the displayed trial end date if present. Do not perform an account upgrade as part of this checkpoint. Current record: newly created October 5; exact status unverified. [Oracle payment/account page](https://docs.oracle.com/en-us/iaas/Content/Billing/Tasks/changingpaymentmethod.htm), [billing widget](https://docs.oracle.com/en-us/iaas/Content/GSG/Concepts/console_topic-AccountCenter-Billing.htm)
+Sign into tenancy **edfreetier**, region **Ashburn**. The dismissed banner is not needed: check **Billing & Cost Management → Upgrade and Manage Payment**, and the Console billing/account widget for any trial balance/days remaining. Record whether it is active Free Trial, Always Free only, or PAYG, plus the displayed trial end date if present. Do not perform an account upgrade as part of this checkpoint. Operator confirmation: plan **Free Tier**, created October 5, no expiration displayed. The expected initial trial transition is approximately one month after creation; the exact date remains unverified. [Oracle payment/account page](https://docs.oracle.com/en-us/iaas/Content/Billing/Tasks/changingpaymentmethod.htm), [billing widget](https://docs.oracle.com/en-us/iaas/Content/GSG/Concepts/console_topic-AccountCenter-Billing.htm)
 
 ### 2. Create the deployment user, group, and policy
 
@@ -28,7 +28,24 @@ In **Identity & Security → Domains → Default**, verify the domain URL is:
 https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443
 ```
 
-Create a service user named `grocery-github-deployer`, following any required email/user fields in the Console. Record its **OCI user OCID**, which starts with `ocid1.user.`. Create group `grocery-github-deployers` and add this user. It needs no API key and should not be an Administrators-group member.
+Create a true identity-domain service user named `grocery-github-service` with the SCIM extension `serviceUser: true` **at creation**. A regular Console-created user is insufficient, and this immutable flag cannot be changed afterward. Use the identity-domain administrator API described in [Oracle's service-user procedure](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/json_web_token_exchange.htm#step-3-optional-use-a-service-user), or an administrator-authenticated signed request with local `EDFREETIER` credentials:
+
+```bash
+cat > /private/tmp/grocery-service-user-rest.json <<'JSON'
+{
+  "schemas": ["urn:ietf:params:scim:schemas:core:2.0:User"],
+  "userName": "grocery-github-service",
+  "urn:ietf:params:scim:schemas:oracle:idcs:extension:user:User": {
+    "serviceUser": true
+  }
+}
+JSON
+oci raw-request --profile EDFREETIER --http-method POST \
+  --target-uri 'https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443/admin/v1/Users' \
+  --request-body file:///private/tmp/grocery-service-user-rest.json
+```
+
+Require HTTP 201 and verify the resulting identity's `serviceUser` flag is true. On an unknown result, look up the username before retrying creation. Record its **OCI user OCID**, which starts with `ocid1.user.`. Create group `grocery-github-deployers` and add this user. It needs no API key and should not be an Administrators-group member.
 
 Create an IAM policy named `grocery-github-deployment` in the **root compartment** with:
 
@@ -101,9 +118,18 @@ Pass criteria: summary **Always-free OCI federation verification passed**, targe
 
 After the verification passes, deactivate/delete the temporary administrator application. Keep the runtime application active. Record account status and successful workflow URL in this document; never record secret values.
 
+## Federation verification record
+
+- Initial [run 37396881112](https://github.com/eshneken/family-grocery-list/actions/runs/37396881112) failed HTTP 401, `unauthorized_client`: “User requesting is not a service user.” The supplied `grocery-github-deployer` account had no `serviceUser` flag. OCI rejected conversion because the flag is immutable.
+- Created `grocery-github-service` with `serviceUser=true`, identity-domain ID `ed094f835ebf427fb32a38671d57027a`, OCI OCID `ocid1.user.oc1..aaaaaaaa3h3zbyyvhskidzw7jlptdqak6sx5vqtisepe2n2o4t4u72lkod5q`.
+- Added the service user to `grocery-github-deployers`, replaced the existing trust's impersonation mapping, and updated the `always-free` GitHub variable `OCI_WIF_SERVICE_USER_OCID`. Removed the regular user from the deployment group; the regular account remains available for manual deletion.
+- Bootstrap helper now rejects a regular user before requesting the administrator token. Seven helper tests pass. Initial branch application CI [run 37381389786](https://github.com/eshneken/family-grocery-list/actions/runs/37381389786) passed unit/coverage and browser checks.
+- Retry [run 37397391548](https://github.com/eshneken/family-grocery-list/actions/runs/37397391548): **passed**. Token exchange succeeded, namespace matched `iddiywf0v4j6`, and the new-tenancy guard and verification record steps passed. No infrastructure or application was deployed. Terraform write permissions and backup instance-principal permissions remain for subsequent checkpoints.
+- **Manual cleanup:** deactivate/delete `grocery-wif-bootstrap-admin`; keep `grocery-github-actions` active. The unused regular account `grocery-github-deployer` may be deleted manually; it has been removed from the deployment group.
+
 ## Following checkpoints
 
-1. **Current:** identity setup and federation verification.
+1. **Passed:** identity setup and federation verification; temporary administrator app cleanup pending.
 2. **Infrastructure implementation/review:** target-bound bootstrap and Basic OKE Terraform; shared PVC/PostgreSQL; private networking and public API restrictions; backup instance-principal IAM; review plans before apply.
 3. **Provision target:** verify one A1, IMDSv1 disabled at launch, version/image, eligible disk/LB allocation, Lens access; manually point rehearsal DNS and configure rehearsal Google OAuth.
 4. **Rehearsal restore:** restore source data, prove app/auth/shopping, shared storage, backups and recovery.

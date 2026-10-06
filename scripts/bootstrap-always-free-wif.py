@@ -104,9 +104,13 @@ def main():
     if compartment["compartment-id"] != TENANCY or compartment["lifecycle-state"] != "ACTIVE":
         raise ValueError("Target compartment identity/state mismatch")
     users = oci_json("identity-domains", "users", "list", "--endpoint", DOMAIN,
-                     "--filter", 'ocid eq "' + args.service_user_ocid + '"')["data"]["resources"]
+                     "--filter", 'ocid eq "' + args.service_user_ocid + '"',
+                     "--attributes", "id,urn:ietf:params:scim:schemas:oracle:idcs:extension:user:User:serviceUser")["data"]["resources"]
     if len(users) != 1 or not users[0].get("id"):
         raise ValueError("Service user was not uniquely found in the new identity domain")
+    extension = users[0].get("urn-ietf-params-scim-schemas-oracle-idcs-extension-user-user") or {}
+    if extension.get("service-user") is not True:
+        raise ValueError("Identity must be created with serviceUser=true; a regular user cannot be converted")
     trust = payload(args.runtime_client_id, users[0]["id"])
     print("Target: EDFREETIER / grocery. Trust accepts only " + SUBJECT)
     secret = getpass.getpass("Temporary administrator client secret (hidden): ")

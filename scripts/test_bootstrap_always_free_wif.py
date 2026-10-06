@@ -35,9 +35,9 @@ class BootstrapTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             bootstrap.payload("", "user")
 
-    def run_main(self, api_results, compartment=None):
+    def run_main(self, api_results, compartment=None, service_user=True):
         identity = {"data": compartment or {"compartment-id": bootstrap.TENANCY, "lifecycle-state": "ACTIVE"}}
-        users = {"data": {"resources": [{"id": "domain-user"}]}}
+        users = {"data": {"resources": [{"id": "domain-user", "urn-ietf-params-scim-schemas-oracle-idcs-extension-user-user": {"service-user": service_user}}]}}
         arguments = ["bootstrap", "--runtime-client-id", "runtime", "--service-user-ocid", "ocid1.user.oc1..test", "--admin-client-id", "admin"]
         output = io.StringIO()
         with patch("sys.argv", arguments), patch.object(bootstrap, "validate_profile"), \
@@ -61,6 +61,10 @@ class BootstrapTests(unittest.TestCase):
     def test_existing_trust_is_not_overwritten(self):
         with self.assertRaisesRegex(ValueError, "already exists"):
             self.run_main([{"access_token": "test-token"}, {"totalResults": 1, "Resources": [{"id": "existing"}]}])
+
+    def test_regular_user_stops_before_admin_token_request(self):
+        with self.assertRaisesRegex(ValueError, "serviceUser=true"):
+            self.run_main([], service_user=False)
 
     def test_wrong_compartment_stops_before_admin_token_request(self):
         with self.assertRaisesRegex(ValueError, "compartment"):
