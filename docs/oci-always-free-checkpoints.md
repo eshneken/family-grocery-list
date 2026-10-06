@@ -1,6 +1,6 @@
 # OCI Always Free execution checkpoints
 
-Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Checkpoint **2 — infrastructure implementation/review — passed**. Administrator IAM and state/bootstrap prerequisites were provisioned October 6; the next checkpoint is review of the Basic OKE platform plan before cluster provisioning. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
+Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Checkpoint **2 — infrastructure implementation/review — passed**. Administrator IAM and state/bootstrap prerequisites were provisioned October 6; the Basic OKE control plane is now active, while worker provisioning awaits A1 capacity. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
 
 ## Recorded baseline and completed preparation
 
@@ -185,3 +185,12 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - `OCI_NODE_AVAILABILITY_DOMAIN` changed to `oYVn:US-ASHBURN-AD-2` for the next reviewed plan. The worker remains exactly A1 2/12 with 50 GB boot disk and IMDSv1 disabled.
 - Lens kubeconfig prepared at `.always-free/edfreetier-kubeconfig`, context `edfreetier-grocery`, absolute OCI CLI path and `EDFREETIER` operator profile. No service-user credentials are used. Worker readiness and live Compute IMDS verification remain pending.
 - [CI 37514140702](https://github.com/eshneken/family-grocery-list/actions/runs/37514140702) passed all three jobs for the remote-state migration implementation.
+
+### A1 capacity results and current hold point
+
+- AD-2 recovery [plan 37515570798](https://github.com/eshneken/family-grocery-list/actions/runs/37515570798) passed with one creation and no changes/deletions. [Apply 37515738870](https://github.com/eshneken/family-grocery-list/actions/runs/37515738870) failed with Compute `Out of host capacity`; OCI completed failed-node-pool cleanup.
+- AD-3 recovery [plan 37516126069](https://github.com/eshneken/family-grocery-list/actions/runs/37516126069) also passed with one creation and no changes/deletions. [Apply 37516461489](https://github.com/eshneken/family-grocery-list/actions/runs/37516461489) launch work request failed with the same host-capacity error.
+- Point-in-time Compute capacity reports for the exact A1 2/12 shape also returned `OUT_OF_HOST_CAPACITY` in all three Ashburn ADs. `OCI_NODE_AVAILABILITY_DOMAIN` is currently AD-3 for a later retry.
+- No worker is running; actual Compute IMDS/boot-volume/tag and Kubernetes node-readiness checks remain pending. Foundation storage, PostgreSQL, Caddy/LB, DNS changes and data migration have not started. Old environment/master are intact.
+- Operator manual checkpoint: import `.always-free/edfreetier-kubeconfig` into Lens, choose `edfreetier-grocery`, and verify the default/system namespaces. Zero nodes is expected at this hold point.
+- [CI 37515700783](https://github.com/eshneken/family-grocery-list/actions/runs/37515700783) passed all three jobs for the implemented remote IAM/Lens/capacity-recovery setup.

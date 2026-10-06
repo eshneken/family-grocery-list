@@ -1,6 +1,6 @@
 # Always Free operator runbook
 
-Current stage: IAM and state/bootstrap prerequisites provisioned October 6; **no OKE/Compute/LB provisioning yet**. Federation passed. The migration branch uses only `EDFREETIER / grocery / us-ashburn-1`; the old environment/master remain intact.
+Current stage: prerequisites, networking, Vault secrets, reserved IP, and Basic OKE control plane provisioned October 6; **worker provisioning is pending A1 capacity**. Foundation PostgreSQL/shared storage/load balancer and data migration have not started. Federation passed. The migration branch uses only `EDFREETIER / grocery / us-ashburn-1`; the old environment/master remain intact.
 
 ## Recovery key and contact settings (completed for this migration)
 
@@ -45,6 +45,14 @@ Requery OKE version/image options immediately before provisioning. Initially rev
 Run **OCI Always Free infrastructure** on `codex/oci-always-free`, stage `production`, operation `plan`. Review Basic cluster, one A1 2/12 node, 50 GB boot disk, IMDSv1 disabled, no managed PostgreSQL, expected gateways/subnets, and one reserved IP. Operator API ingress is public IPv4 TCP 6443; PostgreSQL/kubelet/NodePorts have no public ingress. The helper plan guard rejects unsupported OCI resource types, unexpected tenancy/compartment IDs, deletions/replacements and resource-envelope violations.
 
 After accepting the plan, select `apply` with the full reviewed commit SHA. Verify the actual Compute instance option `areLegacyImdsEndpointsDisabled=true` and metadata v1 denied; verify actual defined tag, shape/count, private IP, disk size, Basic OKE type and version. Check OCI usage/billing after provisioning and after the trial transition; trial credit alone cannot prove $0 steady state.
+
+## A1 host-capacity recovery
+
+The October 6 launches in Ashburn AD-1, AD-2, and AD-3 failed with Compute `Out of host capacity`. The Basic control plane is active and operator API authentication works, but Lens correctly shows zero workers. The rest of the platform remains in the private remote Terraform state; do not restart from empty state or destroy/recreate the control plane.
+
+Wait for the failed workflow and OCI node-pool cleanup to finish before retrying. Check availability for the exact A1 2-OCPU/12 GB shape with `oci compute compute-capacity-report create`; a report is a point-in-time check and does not reserve capacity. [Oracle guidance](https://docs.oracle.com/en-us/iaas/Content/Compute/known-issues.htm#out-of-host-capacity-error-when-creating-compute-instances) permits another AD or retrying later. Set `OCI_NODE_AVAILABILITY_DOMAIN` in GitHub `always-free` to the selected eligible Ashburn AD (currently AD-3), then run the infrastructure workflow's `production / plan`. The recovery plan should propose only the missing node pool: one creation, no changes/deletions. Review before applying with the full branch commit SHA; keep the exact A1 size, 50 GB boot disk and IMDSv1-off settings.
+
+After a successful launch, verify the actual Compute `instance-options.are-legacy-imds-endpoints-disabled`, shape configuration, defined tag, boot-volume size and Kubernetes node readiness/architecture. Complete those checks before foundation provisioning or data migration.
 
 ## Backup image and foundation
 
