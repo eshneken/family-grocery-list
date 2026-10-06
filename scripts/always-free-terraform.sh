@@ -39,7 +39,7 @@ if [[ "$stage" == tenancy-identity ]]; then
   [[ "$profile" == EDFREETIER ]] || { echo 'Tenancy prerequisites require the local administrator profile.' >&2; exit 1; }
   # Before bootstrap this prerequisite root must use local state. Once the
   # bucket exists, migrate it to a separate remote key using the administrator.
-  if oci os bucket get --profile "$profile" --namespace-name "$namespace" --bucket-name "$TF_VAR_state_bucket_name" >/dev/null 2>&1; then
+  if [[ -f "$work_dir/remote-backend-ready" ]] || oci os bucket get --profile "$profile" --namespace-name "$namespace" --bucket-name "$TF_VAR_state_bucket_name" >/dev/null 2>&1; then
     printf 'terraform {\n  backend "oci" {}\n}\n' > "$work_dir/backend.tf"
   else
     printf 'terraform {\n  backend "local" {}\n}\n' > "$work_dir/backend.tf"

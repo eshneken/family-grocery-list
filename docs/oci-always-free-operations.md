@@ -66,7 +66,7 @@ oci --profile EDFREETIER ce cluster create-kubeconfig \
   --kube-endpoint PUBLIC_ENDPOINT --with-auth-context
 ```
 
-Import that kubeconfig into Lens and label the context distinctly. Its exec command must use the absolute OCI CLI path if Lens cannot find `oci`. Prefer an MFA/security-token human session when configured; generate kubeconfig with that profile and `--auth security_token` instead. Never use CI/service-user credentials for Lens. Verify namespace listing, logs and authorized port-forwarding. Source restrictions remain a later discussion.
+For this migration, `.always-free/edfreetier-kubeconfig` has been generated with context `edfreetier-grocery` and an absolute OCI CLI exec path. Import that kubeconfig into Lens and label the context distinctly. Its exec command must use the absolute OCI CLI path if Lens cannot find `oci`. Prefer an MFA/security-token human session when configured; generate kubeconfig with that profile and `--auth security_token` instead. Never use CI/service-user credentials for Lens. Verify namespace listing, logs and authorized port-forwarding. Source restrictions remain a later discussion.
 
 ## Restore and application deployment checkpoint
 

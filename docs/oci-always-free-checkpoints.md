@@ -179,3 +179,9 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 
 - Operator verified buckets and Vault in the Console and proceeded to the platform checkpoint.
 - Administrator IAM state migrated to the existing private bucket at `tenancy-identity/terraform.tfstate`; remote object and four managed resources verified, with a no-change refresh plan. External state backup is no longer a prerequisite. Administrator-only local execution remains enforced.
+
+- [Platform apply 37514156204](https://github.com/eshneken/family-grocery-list/actions/runs/37514156204) created the network, reserved IP, Vault database secrets/TLS, and **ACTIVE Basic OKE v1.36.4** control plane. Public API `143.47.104.94:6443` verified with the operator profile; namespace listing succeeded.
+- The AD-1 A1 launch failed with Compute `Out of host capacity`. No worker was launched; OCI removed the failed node pool, while Terraform retained its partial state. Replan from the preserved remote state before retrying; never discard state or change to a paid shape. [Oracle capacity guidance](https://docs.oracle.com/en-us/iaas/Content/Compute/known-issues.htm#out-of-host-capacity-error-when-creating-compute-instances) recommends another AD or retry later.
+- `OCI_NODE_AVAILABILITY_DOMAIN` changed to `oYVn:US-ASHBURN-AD-2` for the next reviewed plan. The worker remains exactly A1 2/12 with 50 GB boot disk and IMDSv1 disabled.
+- Lens kubeconfig prepared at `.always-free/edfreetier-kubeconfig`, context `edfreetier-grocery`, absolute OCI CLI path and `EDFREETIER` operator profile. No service-user credentials are used. Worker readiness and live Compute IMDS verification remain pending.
+- [CI 37514140702](https://github.com/eshneken/family-grocery-list/actions/runs/37514140702) passed all three jobs for the remote-state migration implementation.
