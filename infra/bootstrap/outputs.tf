@@ -17,3 +17,5 @@ output "vault_id" {
   description = "Vault ID used by the production root for application secrets."
   value       = oci_kms_vault.terraform.id
 }
+
+output "backup_bucket_name" { value = oci_objectstorage_bucket.backups.name }

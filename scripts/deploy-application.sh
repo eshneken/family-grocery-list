@@ -7,6 +7,11 @@ BOOTSTRAP_MARKER="grocery-bootstrap-state"
 BOOTSTRAP_SECRET="grocery-bootstrap-config"
 APP_SECRET="grocery-app-config"
 TIMEOUT_CRONJOB="grocery-shopping-timeout"
+DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-restore-existing}"
+READINESS_MODE="${READINESS_MODE:-public}"
+BACKUP_CRONJOB="grocery-postgres-backup"
+case "$DEPLOYMENT_MODE" in initialize|restore-existing) ;; *) echo "Invalid deployment mode" >&2; exit 1 ;; esac
+case "$READINESS_MODE" in public|internal) ;; *) echo "Invalid readiness mode" >&2; exit 1 ;; esac
 
 suspend_timeout() {
   local existing
@@ -65,10 +70,24 @@ trap cleanup EXIT
 
 kubectl get namespace "$NAMESPACE" >/dev/null
 kubectl --namespace "$NAMESPACE" get secret database >/dev/null
+kubectl --namespace "$NAMESPACE" get secret database-migration >/dev/null
+if [[ "$DEPLOYMENT_MODE" == restore-existing ]]; then
+  kubectl --namespace "$NAMESPACE" get configmap "$BOOTSTRAP_MARKER" >/dev/null || { echo "Restore the database and create the reviewed restore marker before deployment." >&2; exit 1; }
+fi
+kubectl --namespace "$NAMESPACE" create configmap grocery-deploy-control --from-literal="mode=$DEPLOYMENT_MODE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl --namespace "$NAMESPACE" get configmap postgres-ca >/dev/null
 # Pause future executions before migrations or image changes. An already-running
 # job may finish; suspension does not cancel its transaction.
 suspend_timeout
+backup_was_suspended="$(kubectl --namespace "$NAMESPACE" get cronjob "$BACKUP_CRONJOB" -o jsonpath='{.spec.suspend}')"
+kubectl --namespace "$NAMESPACE" patch cronjob "$BACKUP_CRONJOB" --type=merge --patch='{"spec":{"suspend":true}}' >/dev/null
+# Suspension affects future jobs only. Wait for active timeout/backup transactions.
+for ((attempt=0; attempt<120; attempt++)); do
+  active="$(kubectl --namespace "$NAMESPACE" get jobs -o json | python3 -c 'import json,sys; jobs=json.load(sys.stdin)["items"]; print(sum(j.get("status",{}).get("active",0) for j in jobs if j["metadata"].get("labels",{}).get("task")=="postgres-backup" or j["metadata"].get("labels",{}).get("app.kubernetes.io/component")=="shopping-timeout"))')"
+  [[ "$active" == 0 ]] && break
+  sleep 15
+done
+[[ "$active" == 0 ]] || { echo 'Active maintenance jobs did not finish; deployment stopped.' >&2; exit 1; }
 
 render_component() {
   local source_dir="$1"
@@ -199,7 +218,7 @@ if ! kubectl --namespace "$NAMESPACE" rollout status deployment/grocery-app --ti
   exit 1
 fi
 
-if ! curl --fail --silent --show-error \
+if [[ "$READINESS_MODE" == public ]] && ! curl --fail --silent --show-error \
   --retry 12 \
   --retry-all-errors \
   --retry-delay 5 \
@@ -209,7 +228,15 @@ if ! curl --fail --silent --show-error \
   exit 1
 fi
 
-kubectl --namespace "$NAMESPACE" patch cronjob "$TIMEOUT_CRONJOB" \
-  --type=merge --patch='{"spec":{"suspend":false}}' >/dev/null
+if [[ "$READINESS_MODE" == internal ]]; then
+  # Deployment readinessProbe already checked internal ready endpoint. Keep jobs
+  # paused until DNS/TLS and restored data have been accepted.
+  echo 'Internal readiness passed; public verification and job enablement remain manual.'
+else
+  kubectl --namespace "$NAMESPACE" patch cronjob "$TIMEOUT_CRONJOB" --type=merge --patch='{"spec":{"suspend":false}}' >/dev/null
+  if [[ "$backup_was_suspended" == false ]]; then
+    kubectl --namespace "$NAMESPACE" patch cronjob "$BACKUP_CRONJOB" --type=merge --patch='{"spec":{"suspend":false}}' >/dev/null
+  fi
+fi
 
 echo "Application deployment and readiness smoke test passed."

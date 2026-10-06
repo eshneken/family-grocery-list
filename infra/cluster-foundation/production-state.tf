@@ -7,26 +7,24 @@ data "terraform_remote_state" "production" {
     key                 = var.production_state_key
     region              = var.region
     auth                = var.oci_auth
-    config_file_profile = "DEFAULT"
+    config_file_profile = var.oci_config_profile
   }
 }
 
-data "oci_psql_db_system_connection_detail" "grocery" {
-  db_system_id = data.terraform_remote_state.production.outputs.postgres_db_system_id
-}
 
-data "oci_secrets_secretbundle" "postgres_admin" {
-  secret_id = data.terraform_remote_state.production.outputs.postgres_admin_secret_id
+data "oci_secrets_secretbundle" "postgres_roles" {
+  for_each  = nonsensitive(data.terraform_remote_state.production.outputs.postgres_secret_ids)
+  secret_id = each.value
 }
-
+data "oci_secrets_secretbundle" "postgres_tls" {
+  secret_id = data.terraform_remote_state.production.outputs.postgres_tls_secret_id
+}
 locals {
-  postgres_endpoint = data.oci_psql_db_system_connection_detail.grocery.primary_db_endpoint[0]
-  postgres_password = base64decode(data.oci_secrets_secretbundle.postgres_admin.secret_bundle_content[0].content)
-  database_url = format(
-    "postgresql://%s:%s@%s:%s/postgres?sslmode=verify-full&sslrootcert=/var/run/postgres-ca/ca.crt",
-    urlencode(data.terraform_remote_state.production.outputs.postgres_admin_username),
-    urlencode(local.postgres_password),
-    local.postgres_endpoint.fqdn,
-    local.postgres_endpoint.port,
-  )
+  postgres_host      = "postgres.grocery.svc.cluster.local"
+  postgres_passwords = { for role, bundle in data.oci_secrets_secretbundle.postgres_roles : role => base64decode(bundle.secret_bundle_content[0].content) }
+  postgres_tls       = jsondecode(base64decode(data.oci_secrets_secretbundle.postgres_tls.secret_bundle_content[0].content))
+  database_urls = { for role in ["grocery_app", "grocery_owner", "grocery_backup"] : role => format(
+    "postgresql://%s:%s@%s:5432/postgres?sslmode=verify-full&sslrootcert=/var/run/postgres-ca/ca.crt",
+    role, urlencode(local.postgres_passwords[role]), local.postgres_host
+  ) }
 }

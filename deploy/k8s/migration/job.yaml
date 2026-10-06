@@ -29,14 +29,19 @@ spec:
           image: grocery-app-image
           imagePullPolicy: IfNotPresent
           command:
-            - npm
-            - run
-            - db:migrate:deploy
+            - sh
+            - -ec
+            - node scripts/check-deployment-database.mjs && npm run db:migrate:deploy
           env:
+            - name: DEPLOYMENT_MODE
+              valueFrom:
+                configMapKeyRef:
+                  name: grocery-deploy-control
+                  key: mode
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: database
+                  name: database-migration
                   key: DATABASE_URL
           volumeMounts:
             - name: postgres-ca

@@ -1,3 +1,5 @@
+> This branch deploys to the new Always Free tenancy through `always-free`. Old `master` and its `production` environment remain unchanged until retirement/merge. See the [operator runbook](../docs/oci-always-free-operations.md) for the branch-specific deployment and restore checkpoints.
+
 # Application Deployment
 
 Application delivery is split between `.github/workflows/application-ci.yml` and `.github/workflows/application.yml`. Terraform owns OCI and the durable cluster foundation. The CI workflow validates feature branches, while the production workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
@@ -8,7 +10,7 @@ Documentation: [project README](../README.md) | [OCI infrastructure guide](../in
 
 ## Branch And Test Flow
 
-Every push to a non-`master` branch runs two independent jobs:
+Every push to a non-`master` branch runs application checks plus the PostgreSQL/backup platform integration check:
 
 - **Unit tests and coverage** starts PostgreSQL 16, applies migrations, runs linting and type checks, and enforces the repository's coverage floors.
 - **Browser E2E tests** starts a separate PostgreSQL 16 service, applies migrations, and runs the mock-auth desktop/mobile journeys plus the production Google-auth shell test.
@@ -19,7 +21,7 @@ Protected `master` requires **Unit tests and coverage** and **Browser E2E tests*
 
 ## Production Environment Settings
 
-The existing GitHub `production` environment supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#one-time-wif-bootstrap). Add these application secrets:
+The migration branch uses the separate GitHub `always-free` environment, which supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#one-time-wif-bootstrap). Add these application secrets:
 
 | Secret | Purpose |
 | --- | --- |
@@ -70,7 +72,7 @@ The local and production clients represent the same application, so they can and
    ```
 
    Google compares the scheme, hostname, port, path, case, and trailing slash exactly. Production redirect URIs must use HTTPS. Do not add `localhost`, an IP address, a wildcard, or a preview hostname to this client.
-9. Create the client and immediately store its client ID and newly issued client secret in the GitHub `production` environment:
+9. Create the client and immediately store its client ID and newly issued client secret in the GitHub `always-free` environment:
 
    - Repository **Settings** > **Environments** > **production** > **Environment secrets**
    - Replace `GOOGLE_CLIENT_ID` with the production web client ID.

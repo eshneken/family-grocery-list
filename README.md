@@ -64,9 +64,9 @@ flowchart LR
     DNS -->|Manual A record| IP[Reserved OCI public IP]
     Browser -->|HTTPS| LB[OCI load balancer]
     IP --- LB
-    LB --> Caddy[Caddy pod and certificate PVC]
+    LB --> Caddy[Caddy pod / shared platform PVC]
     Caddy --> App[Next.js app]
-    App --> DB[Private OCI PostgreSQL]
+    App --> DB[PostgreSQL pod / shared platform PVC]
 ```
 
 Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at GoDaddy. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The checked-in PNG, SVG, and Excalidraw exports are historical snapshots from before the external-DNS migration.
@@ -126,32 +126,17 @@ Every non-`master` branch push runs CI without production credentials. GitHub re
 
 ## Production Infrastructure
 
-Production runs in OCI and is managed by the manual **OCI infrastructure** GitHub Actions workflow. Terraform is split into three ordered roots:
+The migration branch targets OCI Always Free: Basic OKE, one 2-OCPU/12 GB ARM A1 worker, PostgreSQL in Kubernetes, a shared 50 GiB Caddy/database PVC, and one fixed 10/10 Mbps flexible load balancer. GoDaddy DNS remains manual.
 
-1. [`infra/bootstrap`](infra/bootstrap/README.md) creates the versioned Object Storage state bucket plus the Vault and software key used for application secrets.
-2. [`infra/production`](infra/production/README.md) creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, and the reserved public IP. Public DNS is hosted externally at GoDaddy and is [updated manually](infra/production/README.md#external-dns-setup-godaddy) to point to that IP.
-3. [`infra/cluster-foundation`](infra/cluster-foundation/README.md) creates the Kubernetes namespace, database connection material, Caddy, its persistent certificate volume, and the public OCI load balancer.
+Follow the [execution checkpoints](docs/oci-always-free-checkpoints.md) and [operator runbook](docs/oci-always-free-operations.md). The old environment remains on `master` during migration; do not merge before its retirement. The new roots enforce the new tenancy/compartment, use separate state, and do not support automatic destructive resets.
 
-To add or update OCI infrastructure:
-
-1. Change the appropriate Terraform root on a branch.
-2. Run `terraform fmt -check` and `terraform validate` locally for every affected root.
-3. Open and review a pull request. Terraform changes do not deploy from pull requests.
-4. Merge to `master`.
-5. In GitHub Actions, run **OCI infrastructure** with operation `deploy`.
-6. Review all three jobs. The workflow always applies the roots in dependency order and passes bootstrap/OKE outputs between them.
-
-The `deploy` operation is idempotent and is also the normal path for later updates, such as adding an OCI service. Do not use `destroy` to roll out changes or recover from an apply failure; fix the configuration and rerun `deploy`.
-
-Destroy is intentionally difficult to trigger. It requires selecting `destroy`, typing `DESTROY`, and approving the protected `production-destroy-approval` environment. A successful destroy permanently removes PostgreSQL data, the Caddy volume/certificate cache, OKE, networking, and the Terraform state bucket.
-
-See [infra/README.md](infra/README.md) for variables, IAM/WIF policy, state handling, detailed update steps, verification, and disaster warnings.
+A local administrator prepares tenancy backup IAM and the state/Vault bootstrap. The manual **OCI Always Free infrastructure** workflow plans/applies the platform and cluster foundation separately after review. Full details are in [infra/README.md](infra/README.md).
 
 ## Application Delivery
 
 Every commit pushed to a non-`master` branch runs the **Application CI** workflow. Unit tests, linting, type checks, coverage, and browser E2E tests use an ephemeral PostgreSQL service on the GitHub runner; they never connect to production. Coverage HTML and JSON reports are retained as workflow artifacts.
 
-Successful commits on feature branches stop after CI. Branch protection requires those results before merge. A merged commit on `master` starts the separate **Application production deployment** workflow, which:
+Successful commits on feature branches stop after CI. Branch protection requires those results before merge. A merged commit on `master` starts the separate **Application Always Free deployment** workflow, which:
 
 1. Builds and attests `linux/amd64` and `linux/arm64` images in GHCR.
 2. Selects the immutable image digest rather than a mutable tag.

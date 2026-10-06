@@ -1,9 +1,17 @@
 variable "tenancy_ocid" {
+  validation {
+    condition     = var.tenancy_ocid == "ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua"
+    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+  }
   type      = string
   sensitive = true
 }
 
 variable "region" {
+  validation {
+    condition     = var.region == "us-ashburn-1"
+    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+  }
   type = string
 }
 
@@ -14,6 +22,10 @@ variable "oci_auth" {
 }
 
 variable "compartment_ocid" {
+  validation {
+    condition     = var.compartment_ocid == "ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa"
+    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+  }
   description = "Compartment containing the CCM-created public load balancer."
   type        = string
   sensitive   = true
@@ -54,7 +66,7 @@ variable "app_hostname" {
 variable "caddy_image" {
   description = "Pinned multi-architecture official Caddy image."
   type        = string
-  default     = "docker.io/library/caddy:2.10.2-alpine"
+  default     = "docker.io/library/caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d"
 }
 
 variable "caddy_acme_email" {
@@ -62,34 +74,60 @@ variable "caddy_acme_email" {
   type        = string
 }
 
-variable "caddy_storage_class" {
-  description = "OKE block-volume StorageClass used for durable Caddy ACME state."
+variable "load_balancer_display_name" {
+  description = "Friendly OCI display name assigned to the CCM-created public load balancer."
   type        = string
-  default     = "oci-bv"
+  default     = "lb-grocery"
 }
 
-variable "caddy_pvc_size_gb" {
-  type    = number
-  default = 50
-
+variable "oci_config_profile" {
+  type    = string
+  default = "EDFREETIER"
   validation {
-    condition     = var.caddy_pvc_size_gb >= 50
-    error_message = "OCI block-volume claims for this deployment must be at least 50 GiB."
+    condition     = contains(["EDFREETIER", "DEFAULT"], var.oci_config_profile)
+    error_message = "Use EDFREETIER locally or DEFAULT for short-lived GitHub federation."
   }
 }
 
 variable "load_balancer_min_mbps" {
   type    = number
   default = 10
+  validation {
+    condition     = var.load_balancer_min_mbps == 10
+    error_message = "Always Free load balancer bandwidth must be fixed at 10 Mbps."
+  }
 }
 
 variable "load_balancer_max_mbps" {
   type    = number
   default = 10
+  validation {
+    condition     = var.load_balancer_max_mbps == 10
+    error_message = "Always Free load balancer bandwidth must be fixed at 10 Mbps."
+  }
 }
 
-variable "load_balancer_display_name" {
-  description = "Friendly OCI display name assigned to the CCM-created public load balancer."
+variable "postgres_image" {
+  type    = string
+  default = "docker.io/library/postgres@sha256:0ea6700a3b4f0ae6ce746519073558aed4d88a79d8d07622a9a644946c7319c4"
+}
+variable "backup_image" {
+  description = "Immutable ARM-capable GHCR backup image; build before foundation apply."
   type        = string
-  default     = "lb-grocery"
+  validation {
+    condition     = can(regex("^ghcr.io/.+@sha256:[a-f0-9]{64}$", var.backup_image))
+    error_message = "Supply a verified immutable backup image digest."
+  }
+}
+variable "backup_age_recipient" {
+  description = "Public age recipient only; private recovery key stays outside OCI."
+  type        = string
+  validation {
+    condition     = can(regex("^age1[a-z0-9]+$", var.backup_age_recipient))
+    error_message = "An age public recipient is required."
+  }
+}
+variable "backups_enabled" {
+  type    = bool
+  default = false
 }

@@ -1,3 +1,10 @@
+resource "oci_core_security_list" "nsg_only" {
+  compartment_id = var.compartment_ocid
+  vcn_id         = oci_core_vcn.grocery.id
+  display_name   = "grocery-nsg-only"
+  # No default SSH/API ingress. NSGs own all ingress and egress rules.
+}
+
 resource "oci_core_vcn" "grocery" {
   compartment_id = var.compartment_ocid
   cidr_blocks    = [var.vcn_cidr]
@@ -60,6 +67,7 @@ resource "oci_core_route_table" "private" {
 }
 
 resource "oci_core_subnet" "load_balancer" {
+  security_list_ids          = [oci_core_security_list.nsg_only.id]
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.grocery.id
   cidr_block                 = var.lb_subnet_cidr
@@ -71,6 +79,7 @@ resource "oci_core_subnet" "load_balancer" {
 }
 
 resource "oci_core_subnet" "oke_endpoint" {
+  security_list_ids          = [oci_core_security_list.nsg_only.id]
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.grocery.id
   cidr_block                 = var.oke_endpoint_subnet_cidr
@@ -82,6 +91,7 @@ resource "oci_core_subnet" "oke_endpoint" {
 }
 
 resource "oci_core_subnet" "workers" {
+  security_list_ids          = [oci_core_security_list.nsg_only.id]
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.grocery.id
   cidr_block                 = var.worker_subnet_cidr
@@ -93,6 +103,7 @@ resource "oci_core_subnet" "workers" {
 }
 
 resource "oci_core_subnet" "pods" {
+  security_list_ids          = [oci_core_security_list.nsg_only.id]
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.grocery.id
   cidr_block                 = var.pod_subnet_cidr
@@ -103,18 +114,8 @@ resource "oci_core_subnet" "pods" {
   freeform_tags              = local.common_tags
 }
 
-resource "oci_core_subnet" "postgres" {
-  compartment_id             = var.compartment_ocid
-  vcn_id                     = oci_core_vcn.grocery.id
-  cidr_block                 = var.postgres_subnet_cidr
-  display_name               = "family-grocery-postgres"
-  route_table_id             = oci_core_route_table.private.id
-  prohibit_public_ip_on_vnic = true
-  dns_label                  = "postgres"
-  freeform_tags              = local.common_tags
-}
-
 resource "oci_core_subnet" "bastion" {
+  security_list_ids          = [oci_core_security_list.nsg_only.id]
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.grocery.id
   cidr_block                 = var.bastion_subnet_cidr

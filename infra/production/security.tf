@@ -26,13 +26,6 @@ resource "oci_core_network_security_group" "pods" {
   freeform_tags  = local.common_tags
 }
 
-resource "oci_core_network_security_group" "postgres" {
-  compartment_id = var.compartment_ocid
-  vcn_id         = oci_core_vcn.grocery.id
-  display_name   = "family-grocery-postgres"
-  freeform_tags  = local.common_tags
-}
-
 resource "oci_core_network_security_group_security_rule" "lb_http" {
   network_security_group_id = oci_core_network_security_group.load_balancer.id
   direction                 = "INGRESS"
@@ -126,12 +119,13 @@ resource "oci_core_network_security_group_security_rule" "lb_health_to_workers" 
 }
 
 resource "oci_core_network_security_group_security_rule" "api_public_ingress" {
+  for_each                  = var.operator_api_cidrs
   network_security_group_id = oci_core_network_security_group.oke_api.id
   direction                 = "INGRESS"
   protocol                  = "6"
-  source                    = "0.0.0.0/0"
+  source                    = each.value
   source_type               = "CIDR_BLOCK"
-  description               = "Public Kubernetes API access; OIDC and RBAC enforce identity."
+  description               = "Operator-approved public API access; OCI IAM and Kubernetes RBAC required."
 
   tcp_options {
     destination_port_range {
@@ -399,34 +393,6 @@ resource "oci_core_network_security_group_security_rule" "workers_from_pods" {
   description               = "Pod-to-worker traffic for VCN-native networking."
 }
 
-resource "oci_core_network_security_group_security_rule" "pods_to_postgres" {
-  network_security_group_id = oci_core_network_security_group.postgres.id
-  direction                 = "INGRESS"
-  protocol                  = "6"
-  source                    = oci_core_network_security_group.pods.id
-  source_type               = "NETWORK_SECURITY_GROUP"
-  description               = "Only pods reach PostgreSQL"
-  tcp_options {
-    destination_port_range {
-      min = 5432
-      max = 5432
-    }
-  }
-}
-resource "oci_core_network_security_group_security_rule" "bastion_to_postgres" {
-  network_security_group_id = oci_core_network_security_group.postgres.id
-  direction                 = "INGRESS"
-  protocol                  = "6"
-  source                    = var.bastion_subnet_cidr
-  source_type               = "CIDR_BLOCK"
-  description               = "Bastion port forwarding to PostgreSQL"
-  tcp_options {
-    destination_port_range {
-      min = 5432
-      max = 5432
-    }
-  }
-}
 resource "oci_core_network_security_group_security_rule" "private_egress" {
   for_each = {
     workers = oci_core_network_security_group.workers.id

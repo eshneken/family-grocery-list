@@ -11,11 +11,11 @@ output "app_hostname" {
 }
 output "load_balancer_nsg_id" { value = oci_core_network_security_group.load_balancer.id }
 output "worker_nsg_id" { value = oci_core_network_security_group.workers.id }
-output "postgres_db_system_id" { value = oci_psql_db_system.grocery.id }
-output "postgres_admin_username" { value = var.postgres_admin_username }
-output "postgres_admin_secret_id" {
-  value     = oci_vault_secret.postgres_admin.id
+output "bastion_id" { value = try(oci_bastion_bastion.grocery[0].id, null) }
+
+output "api_nsg_id" { value = oci_core_network_security_group.oke_api.id }
+output "postgres_secret_ids" {
+  value     = { for role, secret in oci_vault_secret.postgres_roles : role => secret.id }
   sensitive = true
 }
-output "postgres_private_ip" { value = oci_psql_db_system.grocery.network_details[0].primary_db_endpoint_private_ip }
-output "bastion_id" { value = oci_bastion_bastion.grocery.id }
+output "postgres_tls_secret_id" { value = oci_vault_secret.postgres_tls.id }

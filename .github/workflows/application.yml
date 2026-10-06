@@ -1,16 +1,27 @@
-name: Application production deployment
+name: Application Always Free deployment
 
 on:
   push:
     branches:
       - master
   workflow_dispatch:
+    inputs:
+      deployment_mode:
+        type: choice
+        default: restore-existing
+        options: [restore-existing, initialize]
+        description: Restored environment or explicitly empty database initialization.
+      readiness_mode:
+        type: choice
+        default: public
+        options: [public, internal]
+        description: Internal mode leaves maintenance jobs suspended until public verification.
 
 permissions:
   contents: read
 
 concurrency:
-  group: application-production
+  group: always-free-maintenance
   cancel-in-progress: false
 
 jobs:
@@ -72,15 +83,17 @@ jobs:
 
   deploy:
     name: Migrate and deploy production
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/codex/oci-always-free'
     needs: container
     runs-on: ubuntu-latest
-    environment: production
+    environment: always-free
     timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
     env:
+      DEPLOYMENT_MODE: ${{ inputs.deployment_mode || 'restore-existing' }}
+      READINESS_MODE: ${{ inputs.readiness_mode || 'public' }}
       IMAGE_REFERENCE: ${{ needs.container.outputs.image_reference }}
       RELEASE_ID: ${{ github.sha }}
       APP_HOSTNAME: ${{ vars.OCI_APP_HOSTNAME }}
@@ -106,12 +119,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          test "$OCI_COMPARTMENT_OCID" = ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa
+          test "$(oci os ns get --query data --raw-output)" = iddiywf0v4j6
           cluster_id="$(
             oci ce cluster list \
               --compartment-id "$OCI_COMPARTMENT_OCID" \
               --name family-grocery-oke \
               --lifecycle-state ACTIVE \
-              --query 'data[0].id' \
+              --query 'data[?type==`BASIC_CLUSTER`].id | [0]' \
               --raw-output
           )"
           if [[ -z "$cluster_id" || "$cluster_id" == null ]]; then

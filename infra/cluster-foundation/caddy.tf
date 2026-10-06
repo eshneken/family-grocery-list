@@ -17,26 +17,6 @@ resource "kubernetes_config_map_v1" "caddy" {
   }
 }
 
-resource "kubernetes_persistent_volume_claim_v1" "caddy" {
-  metadata {
-    name      = "caddy-data"
-    namespace = kubernetes_namespace_v1.grocery.metadata[0].name
-  }
-
-  spec {
-    access_modes       = ["ReadWriteOnce"]
-    storage_class_name = var.caddy_storage_class
-    resources {
-      requests = { storage = "${var.caddy_pvc_size_gb}Gi" }
-    }
-  }
-
-  # The OKE oci-bv StorageClass uses WaitForFirstConsumer. Waiting here would
-  # deadlock Terraform because Caddy is the consumer that triggers binding.
-  wait_until_bound = false
-
-}
-
 resource "kubernetes_deployment_v1" "caddy" {
   metadata {
     name      = "caddy"
@@ -58,6 +38,16 @@ resource "kubernetes_deployment_v1" "caddy" {
         labels = { app = "caddy" }
       }
       spec {
+        automount_service_account_token = false
+        init_container {
+          name    = "init-caddy-directory"
+          image   = var.caddy_image
+          command = ["sh", "-ec", "mkdir -p /shared/caddy; chmod 700 /shared/caddy"]
+          volume_mount {
+            name       = "data"
+            mount_path = "/shared"
+          }
+        }
         container {
           name  = "caddy"
           image = var.caddy_image
@@ -77,6 +67,7 @@ resource "kubernetes_deployment_v1" "caddy" {
           volume_mount {
             name       = "data"
             mount_path = "/data"
+            sub_path   = "caddy"
           }
           volume_mount {
             name       = "config-state"
@@ -98,7 +89,7 @@ resource "kubernetes_deployment_v1" "caddy" {
         volume {
           name = "data"
           persistent_volume_claim {
-            claim_name = kubernetes_persistent_volume_claim_v1.caddy.metadata[0].name
+            claim_name = kubernetes_persistent_volume_claim_v1.platform.metadata[0].name
           }
         }
         volume {

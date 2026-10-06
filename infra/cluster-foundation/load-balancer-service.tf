@@ -3,12 +3,13 @@ resource "kubernetes_service_v1" "caddy" {
     name      = "caddy-public"
     namespace = kubernetes_namespace_v1.grocery.metadata[0].name
     annotations = {
-      "oci.oraclecloud.com/load-balancer-type"                      = "lb"
-      "service.beta.kubernetes.io/oci-load-balancer-shape"          = "flexible"
-      "service.beta.kubernetes.io/oci-load-balancer-shape-flex-min" = tostring(var.load_balancer_min_mbps)
-      "service.beta.kubernetes.io/oci-load-balancer-shape-flex-max" = tostring(var.load_balancer_max_mbps)
-      "oci.oraclecloud.com/oci-network-security-groups"             = data.terraform_remote_state.production.outputs.load_balancer_nsg_id
-      "oci.oraclecloud.com/security-rule-management-mode"           = "None"
+      "service.beta.kubernetes.io/oci-load-balancer-backend-protocol" = "TCP"
+      "oci.oraclecloud.com/load-balancer-type"                        = "lb"
+      "service.beta.kubernetes.io/oci-load-balancer-shape"            = "flexible"
+      "service.beta.kubernetes.io/oci-load-balancer-shape-flex-min"   = tostring(var.load_balancer_min_mbps)
+      "service.beta.kubernetes.io/oci-load-balancer-shape-flex-max"   = tostring(var.load_balancer_max_mbps)
+      "oci.oraclecloud.com/oci-network-security-groups"               = data.terraform_remote_state.production.outputs.load_balancer_nsg_id
+      "oci.oraclecloud.com/security-rule-management-mode"             = "None"
     }
   }
 

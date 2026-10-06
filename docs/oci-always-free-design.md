@@ -1,12 +1,14 @@
 # OCI Always Free design and migration plan
 
-**Status:** Implementation authorized; checkpoint 1 (branch isolation and federation setup) is underway. Infrastructure provisioning and migration have not started. Follow [execution checkpoints](oci-always-free-checkpoints.md).
+**Status:** Federation checkpoint 1 passed; checkpoint 2 implementation is underway. Infrastructure provisioning and migration have not started. Follow [execution checkpoints](oci-always-free-checkpoints.md).
 
 **Prepared:** October 4, 2026; revised October 5 for shared storage, five daily backups, GitHub/Lens access, and latest supported Kubernetes.
 
 **Baseline:** `master` at `813968f` (external GoDaddy DNS), including the shopping-timeout CronJob.
 
 **Proposed implementation branch:** `codex/oci-always-free`.
+
+**October 6 access decision:** The operator explicitly requested leaving API TCP 6443 open to IPv4 sources during the build and while traveling. Retain TLS, OCI IAM authentication and Kubernetes RBAC. Source allowlisting and temporary runner rules below are deferred follow-up options, not provisioning gates. Workers, pods, PostgreSQL and kubelet remain private.
 
 **Accepted storage decisions:** share one PVC between Caddy and PostgreSQL, leaving capacity for future pods; create one database backup daily and retain the last five successful daily backups.
 

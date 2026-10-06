@@ -44,3 +44,14 @@ resource "oci_objectstorage_bucket" "terraform_state" {
   freeform_tags  = var.tags
 
 }
+
+resource "oci_objectstorage_bucket" "backups" {
+  compartment_id = var.compartment_ocid
+  namespace      = local.namespace
+  name           = "grocery-always-free-backups"
+  access_type    = "NoPublicAccess"
+  storage_tier   = "Standard"
+  versioning     = "Disabled"
+  freeform_tags  = var.tags
+  lifecycle { prevent_destroy = true }
+}

@@ -1,6 +1,6 @@
 # OCI Always Free execution checkpoints
 
-Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application cleanup remains a manual operator step. Next checkpoint: **2 — infrastructure implementation/review**. Infrastructure provisioning is blocked on the migration branch until the replacement Terraform is implemented and reviewed.
+Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application cleanup remains a manual operator step. Next checkpoint: **2 — infrastructure implementation/review**. Replacement Terraform and workflow implementation is underway; no infrastructure has been applied. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
 
 ## Recorded baseline and completed preparation
 
@@ -70,7 +70,7 @@ In the same Default domain, create a **Confidential Application** under **Integr
 
 ### 4. Create the temporary administrator application and trust
 
-Create a second Confidential Application named `grocery-wif-bootstrap-admin`. Enable **Client credentials**, assign **Identity Domain Administrator** using **Add app roles** and the **Me** setting described in the existing [WIF bootstrap procedure](../infra/README.md#3-create-a-temporary-administrator-client), finish, and activate. Save its client ID/secret locally. Its secret must never be a GitHub secret.
+Create a second Confidential Application named `grocery-wif-bootstrap-admin`. Enable **Client credentials**, assign **Identity Domain Administrator** using **Add app roles** and the **Me** setting described in [Oracle's identity-domain token-exchange setup](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/json_web_token_exchange.htm), finish, and activate. Save its client ID/secret locally. Its secret must never be a GitHub secret.
 
 From the migration checkout, run this helper using the three non-secret identifiers you recorded:
 
@@ -136,4 +136,13 @@ After the verification passes, deactivate/delete the temporary administrator app
 5. **Cutover:** operator scheduling, frozen final transfer, manual GoDaddy production DNS update, production verification.
 6. **Acceptance/retirement:** shopping run and rollback hold, approved old Terraform destruction, then merge and verify master against the new environment.
 
-Use the [full design/runbook](oci-always-free-design.md) for the exact data-transfer, rollback, and destruction hold points. Do not dispatch the branch infrastructure workflow at checkpoint 1: it intentionally fails without accessing a deployment environment.
+Use the [full design/runbook](oci-always-free-design.md) for the exact data-transfer, rollback, and destruction hold points. At checkpoint 2, use the staged infrastructure workflow in **plan** mode only after administrator bootstrap. An apply requires the full reviewed commit SHA and a passing plan guard.
+
+## Checkpoint 2 implementation record
+
+- Basic OKE, one 2-OCPU/12 GB ARM worker, explicit matching image/version, IMDSv1 disabled at launch; managed OCI PostgreSQL removed.
+- Target-bound roots and isolated working copies/state; administrator backup tag/dynamic-group/policy is separate from compartment-scoped GitHub deployment.
+- One shared retained 50 GiB claim, PostgreSQL TLS/role separation, Caddy subdirectories, fixed 10/10 Mbps TCP LB, daily encrypted backup/last-five retention (initially suspended).
+- October 6 operator steering: leave public Kubernetes API open during build/travel, retain OCI IAM/RBAC/TLS. IP allowlisting is deferred. No operator CIDR is needed to proceed; optional Bastion is disabled.
+- GitHub `always-free` stage plan/apply workflow and branch application deployment; restored environments require an explicit marker and never run household seeding. Old master remains untouched.
+- Read-only administrator/bootstrap plans, CI/integration outcomes and next manual prerequisites are recorded as they complete. No cloud resources created at this checkpoint.
