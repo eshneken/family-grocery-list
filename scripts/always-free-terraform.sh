@@ -37,7 +37,13 @@ if [[ -f "$repo_dir/infra/$stage/.terraform.lock.hcl" ]]; then
 fi
 if [[ "$stage" == tenancy-identity ]]; then
   [[ "$profile" == EDFREETIER ]] || { echo 'Tenancy prerequisites require the local administrator profile.' >&2; exit 1; }
-  printf 'terraform {\n  backend "local" {}\n}\n' > "$work_dir/backend.tf"
+  # Before bootstrap this prerequisite root must use local state. Once the
+  # bucket exists, migrate it to a separate remote key using the administrator.
+  if oci os bucket get --profile "$profile" --namespace-name "$namespace" --bucket-name "$TF_VAR_state_bucket_name" >/dev/null 2>&1; then
+    printf 'terraform {\n  backend "oci" {}\n}\n' > "$work_dir/backend.tf"
+  else
+    printf 'terraform {\n  backend "local" {}\n}\n' > "$work_dir/backend.tf"
+  fi
 elif [[ "$stage" == bootstrap && ! -f "$work_dir/remote-backend-ready" ]]; then
   # Initial bootstrap state lives only in this private operator working directory.
   # If the bucket already exists, require an existing bootstrap state to avoid duplication.
@@ -54,8 +60,12 @@ fi
 backend_args=(-input=false)
 if grep -q 'backend "oci"' "$work_dir/backend.tf"; then
   backend_args=(-input=false -backend-config="bucket=$TF_VAR_state_bucket_name" -backend-config="namespace=$namespace" -backend-config="key=$stage/terraform.tfstate" -backend-config="region=us-ashburn-1" -backend-config="auth=$auth" -backend-config="config_file_profile=$profile")
+  if [[ "$stage" == tenancy-identity && -f "$work_dir/terraform.tfstate" && ! -f "$work_dir/remote-backend-ready" ]]; then
+    backend_args+=(-migrate-state -force-copy)
+  fi
 fi
 terraform -chdir="$work_dir" init "${backend_args[@]}"
+if grep -q 'backend "oci"' "$work_dir/backend.tf"; then touch "$work_dir/remote-backend-ready"; fi
 vars_args=(-input=false)
 if [[ -n "${ALWAYS_FREE_VARS_FILE:-}" ]]; then vars_args=(-input=false -var-file="$ALWAYS_FREE_VARS_FILE"); fi
 terraform -chdir="$work_dir" plan "${vars_args[@]}" -out=reviewed.tfplan

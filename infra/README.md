@@ -6,7 +6,7 @@ Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [
 
 | Root | Owner and resources | State |
 |---|---|---|
-| `tenancy-identity` | Local administrator: defined backup tag, worker dynamic group, bucket-scoped IAM | Private local `.always-free/terraform/tenancy-identity/terraform.tfstate`; back up securely |
+| `tenancy-identity` | Local administrator: defined backup tag, worker dynamic group, bucket-scoped IAM | Initially local; after bootstrap, private remote `tenancy-identity/terraform.tfstate` (local administrator operations only) |
 | `bootstrap` | Private versioned state bucket, private backup bucket, DEFAULT Vault and SOFTWARE key | New bucket: `bootstrap/terraform.tfstate` after local bootstrap migration |
 | `production` | Basic OKE, one A1 2 OCPU/12 GB worker, 50 GB boot disk, private networking/NAT/Service Gateway, public API, reserved LB IP, optional troubleshooting Bastion, DB secrets/TLS | New bucket: `production/terraform.tfstate` |
 | `cluster-foundation` | PostgreSQL 16, Caddy, one retained shared 50 GiB PVC, one fixed 10/10 Mbps TCP LB, daily backup CronJob | New bucket: `cluster-foundation/terraform.tfstate` |
