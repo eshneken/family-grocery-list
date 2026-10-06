@@ -146,3 +146,12 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - October 6 operator steering: leave public Kubernetes API open during build/travel, retain OCI IAM/RBAC/TLS. IP allowlisting is deferred. No operator CIDR is needed to proceed; optional Bastion is disabled.
 - GitHub `always-free` stage plan/apply workflow and branch application deployment; restored environments require an explicit marker and never run household seeding. Old master remains untouched.
 - Read-only administrator/bootstrap plans, CI/integration outcomes and next manual prerequisites are recorded as they complete. No cloud resources created at this checkpoint.
+
+### October 6 review evidence
+
+- Target-bound administrator plan: **4 create, 0 change, 0 destroy** (backup tag namespace/key, dynamic group, narrow policy).
+- Target-bound bootstrap plan: **4 create, 0 change, 0 destroy** (state bucket, backup bucket, DEFAULT Vault, SOFTWARE key). Both passed the plan guard; neither was applied.
+- All four Terraform roots validated in isolated source-only working directories; shell/YAML checks and 12 Python checks passed.
+- [CI run 37507131234](https://github.com/eshneken/family-grocery-list/actions/runs/37507131234) passed actual pinned PostgreSQL TLS/role/dump/restore integration and backup-tool image build. Existing deployment scheduling mocks needed updating for the new backup/active-job checks; final application CI is being rerun after that correction.
+- ACME contact set to `eshneken@gmail.com`; public backup recipient set to `age1gqkvgjanavu7usylugw39sqcdsf970k696c9y9e42jl0wmjvrp7sx5v08e`. The private recovery key was generated/stored by the operator and was never read by Codex or uploaded to OCI/GitHub.
+- Reviewed initial ARM image and AD-1 recorded in GitHub variables; requery service options before actual provisioning. A1 physical capacity remains untested.
