@@ -29,6 +29,13 @@ class SafetyTests(unittest.TestCase):
                 'node_config_details': [{'size': 1}], 'node_source_details': [{'boot_volume_size_in_gbs': 50}],
                 'node_metadata': {'areLegacyImdsEndpointsDisabled': 'true'}}
         guard.check(self.plan('oci_containerengine_node_pool', node))
+        # OCI's real plan schema reports boot volume GB as a string.
+        node['node_source_details'][0]['boot_volume_size_in_gbs'] = '50'
+        guard.check(self.plan('oci_containerengine_node_pool', node))
+        node['node_source_details'][0]['boot_volume_size_in_gbs'] = '100'
+        with self.assertRaisesRegex(ValueError, 'envelope'):
+            guard.check(self.plan('oci_containerengine_node_pool', node))
+        node['node_source_details'][0]['boot_volume_size_in_gbs'] = '50'
         for field, value in [('node_shape', 'VM.Standard.E5.Flex'), ('node_metadata', {})]:
             with self.assertRaises(ValueError):
                 guard.check(self.plan('oci_containerengine_node_pool', dict(node, **{field: value})))

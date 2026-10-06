@@ -35,7 +35,7 @@ def check(plan):
         if typ == 'oci_containerengine_node_pool':
             shape = after['node_shape_config'][0]
             if (after['node_shape'], shape['ocpus'], shape['memory_in_gbs'], after['node_config_details'][0]['size'],
-                after['node_source_details'][0]['boot_volume_size_in_gbs']) != ('VM.Standard.A1.Flex', 2, 12, 1, 50):
+                str(after['node_source_details'][0]['boot_volume_size_in_gbs'])) != ('VM.Standard.A1.Flex', 2, 12, 1, '50'):
                 raise ValueError('Worker exceeds the Always Free envelope')
             if after.get('node_metadata', {}).get('areLegacyImdsEndpointsDisabled') != 'true':
                 raise ValueError('IMDSv1 must be disabled at launch')
