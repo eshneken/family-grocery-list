@@ -194,3 +194,5 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - No worker is running; actual Compute IMDS/boot-volume/tag and Kubernetes node-readiness checks remain pending. Foundation storage, PostgreSQL, Caddy/LB, DNS changes and data migration have not started. Old environment/master are intact.
 - Operator manual checkpoint: import `.always-free/edfreetier-kubeconfig` into Lens, choose `edfreetier-grocery`, and verify the default/system namespaces. Zero nodes is expected at this hold point.
 - [CI 37515700783](https://github.com/eshneken/family-grocery-list/actions/runs/37515700783) passed all three jobs for the implemented remote IAM/Lens/capacity-recovery setup.
+
+- Final failed-node-pool cleanup work request **SUCCEEDED**. Independent compartment inventory verified zero Compute instances and zero boot volumes in AD-1/AD-2/AD-3. The active Basic control plane, network, Vault secrets, reserved IP, and remote state are preserved for a later single-worker retry.
