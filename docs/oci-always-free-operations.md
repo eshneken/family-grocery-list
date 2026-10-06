@@ -1,6 +1,6 @@
 # Always Free operator runbook
 
-Current stage: implementation/review, **no cloud provisioning yet**. Federation passed. The migration branch uses only `EDFREETIER / grocery / us-ashburn-1`; the old environment/master remain intact.
+Current stage: IAM and state/bootstrap prerequisites provisioned October 6; **no OKE/Compute/LB provisioning yet**. Federation passed. The migration branch uses only `EDFREETIER / grocery / us-ashburn-1`; the old environment/master remain intact.
 
 ## Recovery key and contact settings (completed for this migration)
 

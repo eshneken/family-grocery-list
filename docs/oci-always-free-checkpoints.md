@@ -1,6 +1,6 @@
 # OCI Always Free execution checkpoints
 
-Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Next checkpoint: **2 — infrastructure implementation/review**. Replacement Terraform and workflow implementation passed validation and application CI; prerequisite provisioning is the next step. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
+Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Checkpoint **2 — infrastructure implementation/review — passed**. Administrator IAM and state/bootstrap prerequisites were provisioned October 6; the next checkpoint is review of the Basic OKE platform plan before cluster provisioning. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
 
 ## Recorded baseline and completed preparation
 
@@ -155,3 +155,12 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - [CI run 37507593734](https://github.com/eshneken/family-grocery-list/actions/runs/37507593734): all three jobs passed (unit tests/coverage, browser journeys, and actual pinned PostgreSQL TLS/role/dump/restore integration plus backup-tool image build).
 - ACME contact set to `eshneken@gmail.com`; public backup recipient set to `age1gqkvgjanavu7usylugw39sqcdsf970k696c9y9e42jl0wmjvrp7sx5v08e`. The private recovery key was generated/stored by the operator and was never read by Codex or uploaded to OCI/GitHub.
 - Reviewed initial ARM image and AD-1 recorded in GitHub variables; requery service options before actual provisioning. A1 physical capacity remains untested.
+
+## October 6 prerequisite provisioning
+
+- Operator authorized proceeding after review. Commit `27f62a7` applied the four administrator IAM resources and four bootstrap resources: **8 created, 0 changed, 0 destroyed**.
+- State bucket is private Standard storage with versioning enabled; backup bucket is private Standard storage with versioning disabled. Vault is `DEFAULT / ACTIVE`; key is `SOFTWARE / ENABLED`.
+- Bootstrap state migrated successfully to `grocery-always-free-tfstate/bootstrap/terraform.tfstate`; remote object existence verified. Administrator IAM state remains private/local and must be backed up securely.
+- [Application CI run 37508862432](https://github.com/eshneken/family-grocery-list/actions/runs/37508862432) passed after final workflow/IAM changes.
+- Backup-only image publication dispatched through the existing application workflow, with application build/deployment skipped. New standalone workflows cannot be dispatched until present on the default branch.
+- First OKE plan dispatch exposed a GitHub expression-scope validation error (`runner.temp` in job-level environment); moved it into step-level environment before retrying. No OKE/Compute/LB resources have been created and no data has been migrated.
