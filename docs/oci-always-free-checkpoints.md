@@ -196,3 +196,9 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - [CI 37515700783](https://github.com/eshneken/family-grocery-list/actions/runs/37515700783) passed all three jobs for the implemented remote IAM/Lens/capacity-recovery setup.
 
 - Final failed-node-pool cleanup work request **SUCCEEDED**. Independent compartment inventory verified zero Compute instances and zero boot volumes in AD-1/AD-2/AD-3. The active Basic control plane, network, Vault secrets, reserved IP, and remote state are preserved for a later single-worker retry.
+
+## Scheduled capacity retry setup
+
+- Operator explicitly requested scheduled node-pool Terraform retries and a success alert, then selected a **15-minute** interval. Retry window: 72 hours, ending October 9, 2026 at 8:26 PM Pacific.
+- Added workflow `retry_nodepool_only` input with enforced plan scope: only the missing `oci_containerengine_node_pool.grocery` may be created; no other changes/deletions are allowed. Exact A1 2/12, single node, 50 GB boot and IMDSv1-off limits remain enforced. Six focused guard/backup checks passed.
+- Scheduler remains in this Codex thread, rotates eligible ADs, avoids overlapping workflow/cleanup, pins the reviewed commit, and stops on verified success, unexpected error/revision change, or expiration. No foundation/data-migration actions are authorized by this automation.
