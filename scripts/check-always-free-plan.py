@@ -1,5 +1,6 @@
 """Reject unexpected cost-bearing resources, replacements and wrong target plans."""
 import json
+import os
 import sys
 
 TENANCY = 'ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua'
@@ -15,7 +16,7 @@ ALLOWED_OCI = {
 }
 
 
-def check(plan):
+def check(plan, nodepool_retry_only=False):
     changes = []
     for resource in plan.get('resource_changes', []):
         if resource.get('mode') != 'managed':
@@ -23,6 +24,10 @@ def check(plan):
         typ = resource['type']
         change = resource['change']
         after = change.get('after') or {}
+        if nodepool_retry_only and change['actions'] != ['no-op']:
+            if not (resource['address'] == 'oci_containerengine_node_pool.grocery'
+                    and typ == 'oci_containerengine_node_pool' and change['actions'] == ['create']):
+                raise ValueError('Node-pool retry forbids other resource changes: ' + resource['address'])
         if 'delete' in change['actions']:
             raise ValueError('Deletion/replacement requires separate reviewed maintenance: ' + resource['address'])
         if typ.startswith('oci_') and typ not in ALLOWED_OCI:
@@ -61,7 +66,7 @@ def check(plan):
 
 if __name__ == '__main__':
     try:
-        changes = check(json.load(sys.stdin))
+        changes = check(json.load(sys.stdin), nodepool_retry_only=os.environ.get('ALWAYS_FREE_NODEPOOL_RETRY_ONLY') == 'true')
         print('Always Free plan guard passed. Proposed resource changes:')
         print('\n'.join(changes) or '(none)')
     except (ValueError, KeyError, TypeError) as error:

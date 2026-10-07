@@ -12,6 +12,10 @@ on:
         required: true
         type: choice
         options: [plan, apply]
+      retry_nodepool_only:
+        description: Reject all changes except creating the missing single A1 node pool.
+        type: boolean
+        default: false
       confirm_apply_sha:
         description: Full reviewed commit SHA, required only for apply.
         type: string
@@ -35,6 +39,7 @@ jobs:
       TF_VAR_caddy_acme_email: ${{ vars.CADDY_ACME_EMAIL }}
       TF_VAR_backup_image: ${{ vars.OCI_BACKUP_IMAGE }}
       TF_VAR_backup_age_recipient: ${{ vars.OCI_BACKUP_AGE_RECIPIENT }}
+      ALWAYS_FREE_NODEPOOL_RETRY_ONLY: ${{ inputs.retry_nodepool_only }}
       CONFIRM_APPLY_SHA: ${{ inputs.confirm_apply_sha }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6

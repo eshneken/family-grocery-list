@@ -43,6 +43,21 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'envelope'):
             guard.check(self.plan('oci_containerengine_node_pool', node))
 
+    def test_scheduled_retry_rejects_changes_to_existing_platform(self):
+        for typ, action in [('oci_core_vcn', 'create'), ('oci_core_vcn', 'update'),
+                            ('oci_containerengine_cluster', 'update'), ('random_password', 'create')]:
+            with self.assertRaisesRegex(ValueError, 'retry forbids'):
+                guard.check(self.plan(typ, {}, [action]), nodepool_retry_only=True)
+        node = {'node_shape': 'VM.Standard.A1.Flex', 'node_shape_config': [{'ocpus': 2, 'memory_in_gbs': 12}],
+                'node_config_details': [{'size': 1}], 'node_source_details': [{'boot_volume_size_in_gbs': '50'}],
+                'node_metadata': {'areLegacyImdsEndpointsDisabled': 'true'}}
+        plan = self.plan('oci_containerengine_node_pool', node)
+        plan['resource_changes'][0]['address'] = 'oci_containerengine_node_pool.grocery'
+        guard.check(plan, nodepool_retry_only=True)
+        plan['resource_changes'][0]['change']['actions'] = ['update']
+        with self.assertRaisesRegex(ValueError, 'retry forbids'):
+            guard.check(plan, nodepool_retry_only=True)
+
     def test_wrong_compartment_and_replacement_rejected(self):
         with self.assertRaisesRegex(ValueError, 'another tenancy'):
             guard.check(self.plan('oci_core_vcn', {'compartment_id': 'legacy'}))
