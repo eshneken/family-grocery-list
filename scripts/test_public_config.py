@@ -9,10 +9,16 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class PublicConfiguration(unittest.TestCase):
+    def test_deployment_examples_use_reserved_hostnames(self):
+        for path in (ROOT / 'infra').rglob('terraform.tfvars.example'):
+            match = re.search(r'app_hostname\s*=\s*"([^"]+)"', path.read_text())
+            if match:
+                self.assertTrue(match[1] == 'example.com' or match[1].endswith('.example.com'))
+
     def test_public_files_contain_no_deployed_identity_literals(self):
         failures = []
         patterns = [r'ocid1\.[a-z0-9_.-]*[a-z0-9]{20,}', r'idcs-[a-f0-9]{32}',
-                    r'/Users/[^/\s]+/', r'age1[a-z0-9]{40,}']
+                    r'/' + r'Users/[^/\s]+/', r'age1[a-z0-9]{40,}']
         for name in subprocess.check_output(['git', 'ls-files'], cwd=ROOT, text=True).splitlines():
             path = ROOT / name
             if not path.is_file() or path.suffix in ['.png', '.jpg', '.pdf']:

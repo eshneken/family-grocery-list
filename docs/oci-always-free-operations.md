@@ -12,8 +12,9 @@ For a local operator session:
 
 ```bash
 export OCI_TARGET_CONFIG_FILE="/private/path/to/target.json"
-python3 scripts/oci_target.py
-export OCI_CLI_PROFILE="$(python3 -c 'from scripts.oci_target import load_target; print(load_target()["operator_profile"])')"
+target_exports="$(python3 scripts/oci_target.py --shell)"
+eval "$target_exports"
+export OCI_CLI_PROFILE="$OCI_OPERATOR_PROFILE"
 export OPERATOR_KUBECONFIG="/private/path/to/operator-kubeconfig"
 export OPERATOR_KUBE_CONTEXT="operator-context"
 ```
@@ -41,7 +42,7 @@ Generate a fresh operator config only with the intended identity:
 
 ```bash
 oci --profile ${OCI_CLI_PROFILE} ce cluster create-kubeconfig \
-  --cluster-id '${OCI_CLUSTER_OCID}' \
+  --cluster-id "${OCI_CLUSTER_OCID}" \
   --file "${OPERATOR_KUBECONFIG}" --region us-ashburn-1 --auth api_key \
   --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT --with-auth-context
 ```
