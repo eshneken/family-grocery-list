@@ -29,7 +29,7 @@ jobs:
             echo 'enabled=false' >> "$GITHUB_OUTPUT"
             echo 'Backup monitoring is disabled pending cutover approval.'
           fi
-      - uses: ./.github/actions/setup-oci-wif
+      - uses: ./.github/actions/setup-always-free-monitor-wif
         if: steps.gate.outputs.enabled == 'true'
         with:
           domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
