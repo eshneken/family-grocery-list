@@ -1,0 +1,58 @@
+name: Always Free backup health
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 * * * *'
+permissions:
+  contents: read
+concurrency:
+  group: always-free-maintenance
+  cancel-in-progress: false
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    environment: always-free
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - name: Check activation
+        id: gate
+        env:
+          ENABLED: ${{ vars.OCI_BACKUP_MONITOR_ENABLED }}
+        run: |
+          if [[ "$ENABLED" == true ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'enabled=false' >> "$GITHUB_OUTPUT"
+            echo 'Backup monitoring is disabled pending cutover approval.'
+          fi
+      - uses: ./.github/actions/setup-always-free-monitor-wif
+        if: steps.gate.outputs.enabled == 'true'
+        with:
+          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
+          audience: ${{ vars.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
+          region: ${{ vars.OCI_REGION }}
+      - name: Create target kubeconfig
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          set -euo pipefail
+          oci ce cluster create-kubeconfig \
+            --cluster-id ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq \
+            --file "$RUNNER_TEMP/oke-kubeconfig" --region us-ashburn-1 \
+            --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT \
+            --with-auth-context --auth security_token --profile DEFAULT
+          context="$(kubectl --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" config current-context)"
+          echo "MONITOR_CONTEXT=$context" >> "$GITHUB_ENV"
+      - name: Verify backup health
+        if: steps.gate.outputs.enabled == 'true'
+        run: |
+          python3 scripts/check-backup-health.py \
+            --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" --context "$MONITOR_CONTEXT" \
+            --oci-profile DEFAULT --oci-auth security_token
