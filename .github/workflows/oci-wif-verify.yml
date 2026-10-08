@@ -2,6 +2,15 @@ name: Verify always-free OCI federation
 
 on:
   workflow_dispatch:
+    inputs:
+      check_backup_health:
+        description: Read-only rehearsal backup check (permits suspended schedule)
+        type: boolean
+        default: false
+
+concurrency:
+  group: always-free-maintenance
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -51,3 +60,17 @@ jobs:
             echo 'Target: EDFREETIER / grocery / us-ashburn-1. Object Storage namespace: iddiywf0v4j6.'
             echo 'GitHub token exchange and namespace discovery passed. No infrastructure was provisioned.'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify rehearsal backup health
+        if: inputs.check_backup_health
+        shell: bash
+        run: |
+          set -euo pipefail
+          oci ce cluster create-kubeconfig \
+            --cluster-id ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq \
+            --file "$RUNNER_TEMP/oke-kubeconfig" --region us-ashburn-1 \
+            --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT \
+            --with-auth-context --auth security_token --profile DEFAULT
+          context="$(kubectl --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" config current-context)"
+          python3 -B scripts/check-backup-health.py \
+            --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" --context "$context" \
+            --oci-profile DEFAULT --oci-auth security_token --allow-suspended

@@ -95,3 +95,25 @@ Before enabling daily backups, run a one-off Job from `grocery-postgres-backup`,
 Canonical GoDaddy DNS, production OAuth/session settings and the final authoritative transfer happen only after rehearsal/shopping acceptance. Preserve source state and frozen old data, then run the hold/reverse-restore rollback process in the design. Destroy old resources using the pinned legacy checkout/backend after the accepted hold; do not use these new target-bound roots for old destruction.
 
 Before merge, permit `master` in GitHub `always-free` branch restrictions, update hostname/production secrets and remove obsolete legacy instructions/artifacts. After merge, master uses the new workflows/environment and the same environment-based federation subject. Do not merge while the old environment still needs normal deployments.
+
+## GitHub Actions backup alerts
+
+`always-free-backup-health.yml` checks backup health hourly at minute 17, using the existing GitHub-to-OCI federation identity. It lists object metadata and Kubernetes Jobs; it never downloads archives/manifests or reads database contents. Target namespace and cluster guards reject a different tenancy/cluster. Failed queries also fail the run instead of reporting health.
+
+The checker fails when there is no complete archive/manifest pair, the newest backup is older than 30 hours or dated in the future, a manifest lacks its archive, an archive is empty, more than five complete backups remain, a newer backup Job failed, a backup Job is active longer than 40 minutes, or the daily backup CronJob is suspended. A later successful backup clears an older Job failure. These checks do not verify decryption/restorability; keep periodic operator restore drills. They also do not monitor general application uptime, node health, disk use or TLS.
+
+Before merge/cutover, run **Verify always-free OCI federation** on `codex/oci-always-free` with `check_backup_health=true`. This is a read-only rehearsal check that allows the intentionally suspended daily schedule. Validate a healthy run and a controlled failed-upload Job; preserve existing backup objects and remove the probe afterward. No IAM expansion is included.
+
+The hourly workflow remains disabled until the `always-free` environment variable `OCI_BACKUP_MONITOR_ENABLED` is exactly `true`. Enable it only after final cutover and the reviewed foundation change enabling daily backups. Scheduled workflows run from the default branch, so this file must first be merged through the cutover/merge checkpoint. Before activation, ensure the environment permits the default branch and review the default-branch implementation. Rehearsal branch dispatches do not activate an hourly schedule.
+
+In your GitHub notification settings, enable Actions email notifications and choose failed workflows only. Scheduled-run notifications go to the user who last changed the schedule; confirm that ownership and an actual delivered failure notification before treating alerts as operational. Repeated failed runs may generate repeated alerts; the monitor does not maintain incident/deduplication state. GitHub scheduling can be delayed or dropped, and a workflow that never runs cannot alert on itself. See [Actions notifications](https://docs.github.com/en/actions/concepts/workflows-and-actions/notifications-for-workflow-runs), [notification settings](https://docs.github.com/en/subscriptions-and-notifications/how-tos/managing-github-actions-notifications), and [schedule limitations](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule).
+
+Run local behavior tests with `python3 -B scripts/test_backup_health.py`. For a manual operator rehearsal check:
+
+```bash
+python3 -B scripts/check-backup-health.py \
+  --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery \
+  --oci-profile EDFREETIER --allow-suspended
+```
+
+Do not pass `--allow-suspended` to the production scheduled monitor. Stop alerts by setting `OCI_BACKUP_MONITOR_ENABLED=false`; this does not stop backup Jobs or change infrastructure.
