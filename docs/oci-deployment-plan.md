@@ -56,4 +56,4 @@ One worker, one database pod, one Caddy replica and one shared disk are delibera
 
 ## Delivery handoff status
 
-Production is already serving from the migration branch's reviewed image. Until the default-branch handoff, `application.yml` remains disabled. The isolated backup-health workflow is already on `master` and active. Old foundation/platform/state storage and dedicated access cleanup passed. Merge the migration PR after required CI, verify all default-branch jobs select `always-free`, enable application delivery, and deploy in `restore-existing` mode. The existing database and bootstrap marker must survive that first master deployment.
+The [migration PR #27](https://github.com/eshneken/family-grocery-list/pull/27) passed all three CI checks and is merged into `master`. Application delivery is enabled and defaults to `restore-existing`; all production deployment jobs select `always-free`. The hourly backup-health workflow is active. Existing database contents and the reviewed bootstrap marker are preserved across releases; initialization is reserved for an explicitly empty installation.
