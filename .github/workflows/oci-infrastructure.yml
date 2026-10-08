@@ -39,6 +39,7 @@ jobs:
       TF_VAR_caddy_acme_email: ${{ vars.CADDY_ACME_EMAIL }}
       TF_VAR_backup_image: ${{ vars.OCI_BACKUP_IMAGE }}
       TF_VAR_backup_age_recipient: ${{ vars.OCI_BACKUP_AGE_RECIPIENT }}
+      TF_VAR_backups_enabled: ${{ vars.OCI_BACKUPS_ENABLED || 'false' }}
       ALWAYS_FREE_NODEPOOL_RETRY_ONLY: ${{ inputs.retry_nodepool_only }}
       CONFIRM_APPLY_SHA: ${{ inputs.confirm_apply_sha }}
     steps:
