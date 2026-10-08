@@ -1,6 +1,13 @@
-tenancy_ocid = "ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua"
-compartment_ocid = "ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa"
+# Examples only. Obtain deployed values from ignored private configuration.
+approved_target = {
+  tenancy_ocid = "REPLACE_TENANCY_OCID"
+  compartment_ocid = "REPLACE_COMPARTMENT_OCID"
+  region = "us-ashburn-1"
+}
+backup_bucket_name = "REPLACE_BACKUP_BUCKET"
+tenancy_ocid = "REPLACE_TENANCY_OCID"
+compartment_ocid = "REPLACE_COMPARTMENT_OCID"
 region = "us-ashburn-1"
-oci_config_profile = "EDFREETIER"
-state_bucket_name = "grocery-always-free-tfstate"
-state_namespace = "iddiywf0v4j6"
+oci_config_profile = "REPLACE_OPERATOR_PROFILE"
+state_bucket_name = "REPLACE_STATE_BUCKET"
+state_namespace = "REPLACE_OBJECT_NAMESPACE"

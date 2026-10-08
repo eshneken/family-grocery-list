@@ -3,8 +3,7 @@ import json
 import os
 import sys
 
-TENANCY = 'ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua'
-COMPARTMENT = 'ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa'
+from oci_target import load_target
 ALLOWED_OCI = {
     'oci_kms_vault', 'oci_kms_key', 'oci_objectstorage_bucket', 'oci_vault_secret',
     'oci_containerengine_cluster', 'oci_containerengine_node_pool', 'oci_bastion_bastion',
@@ -16,7 +15,11 @@ ALLOWED_OCI = {
 }
 
 
-def check(plan, nodepool_retry_only=False):
+def check(plan, nodepool_retry_only=False, target=None):
+    target = target or load_target()
+    for key in ("tenancy_ocid", "compartment_ocid", "region"):
+        if key in plan.get("variables", {}) and plan["variables"][key]["value"] != target[key]:
+            raise ValueError("Plan inputs differ from the approved target")
     changes = []
     for resource in plan.get('resource_changes', []):
         if resource.get('mode') != 'managed':
@@ -33,7 +36,7 @@ def check(plan, nodepool_retry_only=False):
         if typ.startswith('oci_') and typ not in ALLOWED_OCI:
             raise ValueError('Unapproved OCI resource type: ' + typ)
         compartment = after.get('compartment_id')
-        if compartment and compartment not in (TENANCY, COMPARTMENT):
+        if compartment and compartment not in (target['tenancy_ocid'], target['compartment_ocid']):
             raise ValueError('Resource targets another tenancy/compartment')
         if typ == 'oci_containerengine_cluster' and after.get('type') != 'BASIC_CLUSTER':
             raise ValueError('Cluster must be Basic')

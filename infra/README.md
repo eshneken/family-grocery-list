@@ -1,6 +1,6 @@
 # OCI Always Free infrastructure
 
-These roots target **EDFREETIER / grocery / us-ashburn-1** exclusively. Canonical production is live here; the old grocery environment has been retired after explicit waiver of the rollback hold. Master now contains the Always Free deployment implementation; application delivery is enabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
+These roots target **configured target tenancy / compartment / region** exclusively. Canonical production is live here; the old grocery environment has been retired after explicit waiver of the rollback hold. Master now contains the Always Free deployment implementation; application delivery is enabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
 
 Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [operator runbook](../docs/oci-always-free-operations.md). Provisioning and data cutover are separate checkpoints.
 

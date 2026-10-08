@@ -37,12 +37,18 @@ def database_env(url):
                 PGSSLROOTCERT='/var/run/postgres-ca/ca.crt', PGCONNECT_TIMEOUT='20')
 
 
+def backup_target(env):
+    keys = ['OCI_NAMESPACE', 'BACKUP_BUCKET', 'EXPECTED_OCI_NAMESPACE', 'EXPECTED_BACKUP_BUCKET']
+    if any(not env.get(key) for key in keys):
+        raise ValueError('Explicit backup target and approved values are required')
+    if env['OCI_NAMESPACE'] != env['EXPECTED_OCI_NAMESPACE'] or env['BACKUP_BUCKET'] != env['EXPECTED_BACKUP_BUCKET']:
+        raise ValueError('Backup target is not the approved bucket')
+    return env['OCI_NAMESPACE'], env['BACKUP_BUCKET']
+
+
 def main():
     import oci
-    namespace = os.environ['OCI_NAMESPACE']
-    bucket = os.environ['BACKUP_BUCKET']
-    if namespace != 'iddiywf0v4j6' or bucket != 'grocery-always-free-backups':
-        raise ValueError('Backup target is not the approved Always Free bucket')
+    namespace, bucket = backup_target(os.environ)
     recipient = os.environ['AGE_RECIPIENT']
     if not re.fullmatch(r'age1[a-z0-9]+', recipient):
         raise ValueError('Invalid public age recipient')

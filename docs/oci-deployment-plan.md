@@ -1,6 +1,6 @@
 # Production architecture and tool selection
 
-Production moved to the `EDFREETIER` tenancy in Ashburn on October 8, 2026. The canonical service is https://grocery.shnekendorf.com at reserved IPv4 `129.159.189.16`. The old grocery environment was retired October 8 after an explicit operator waiver of the hold; its Vault/key deletion is pending until November 7. It is not an application or database dependency. The [migration design](oci-always-free-design.md) retains the historical plan and retirement checkpoints. Use the [operator runbook](oci-always-free-operations.md) for current procedures.
+Production moved to the `${OCI_CLI_PROFILE}` tenancy in Ashburn on October 8, 2026. The canonical service is https://grocery.example.com at reserved IPv4 `${PRODUCTION_IPV4}`. The old grocery environment was retired October 8 after an explicit operator waiver of the hold; its Vault/key deletion is pending until November 7. It is not an application or database dependency. The [migration design](oci-always-free-design.md) retains the historical plan and retirement checkpoints. Use the [operator runbook](oci-always-free-operations.md) for current procedures.
 
 ## Selected tools and responsibilities
 
@@ -21,7 +21,7 @@ Production moved to the `EDFREETIER` tenancy in Ashburn on October 8, 2026. The 
 | Deployment authentication | GitHub OIDC → OCI identity-domain federation | `always-free` environment; short-lived credentials, separate from worker/human identities |
 | Infrastructure | Terraform | Target-bound staging helper, separate roots/state, plan guard and full-SHA apply confirmation |
 | Credentials | OCI DEFAULT Vault / SOFTWARE key; Kubernetes Secrets | Deployment materializes database credentials and private TLS; application OAuth/session values come from GitHub environment secrets |
-| Human access | OCI CLI `EDFREETIER`, kubectl, Lens, optional pgAdmin | Distinct operator kubeconfig; authenticated database port-forward; no database Bastion is provisioned |
+| Human access | OCI CLI `${OCI_CLI_PROFILE}`, kubectl, Lens, optional pgAdmin | Distinct operator kubeconfig; authenticated database port-forward; no database Bastion is provisioned |
 | Local development | Docker Compose PostgreSQL | Separate disposable data; Vitest and Playwright validate application behavior |
 
 The quota guard permits one flexible LB with 10 Mbps total bandwidth and one network LB, with no allowance for the old fixed LB shapes. **Only the flexible LB is deployed**; the network LB allowance is available for a separate future use. Other quota restrictions remain in place. Check actual tenancy usage and entitlement before a second app; do not infer unused tenancy capacity from this application's allocation alone.
@@ -48,7 +48,7 @@ Backups use instance-principal authentication through IMDSv2. CI uses federation
 
 ## State and availability
 
-Terraform roots are `tenancy-identity`, `bootstrap`, `production`, and `cluster-foundation`. Their separate state keys live in the private versioned `grocery-always-free-tfstate` bucket in namespace `iddiywf0v4j6`. Administrator IAM changes remain local-operator operations; ordinary CI does not receive tenancy-wide IAM writes. Terraform plans/state contain secrets and must stay private.
+Terraform roots are `tenancy-identity`, `bootstrap`, `production`, and `cluster-foundation`. Their separate state keys live in the private versioned `${OCI_STATE_BUCKET}` bucket in namespace `${OCI_OBJECT_NAMESPACE}`. Administrator IAM changes remain local-operator operations; ordinary CI does not receive tenancy-wide IAM writes. Terraform plans/state contain secrets and must stay private.
 
 The worker and shared data disk allocate about 100 GB combined. The 50 GiB claim is shared capacity, not 50 GiB independently for each pod. It has Terraform `prevent_destroy` and a Retain storage policy. Caddy mounts only `caddy`; PostgreSQL mounts only `postgres`. Keep PostgreSQL directory ownership at UID 999 and mode 0700; do not recursively change the shared volume's owner.
 

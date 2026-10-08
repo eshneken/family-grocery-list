@@ -2,6 +2,10 @@
 import importlib.util
 from pathlib import Path
 import unittest
+import os
+import json
+from unittest.mock import patch
+from oci_target_fixture import TARGET
 from unittest.mock import Mock
 
 
@@ -18,6 +22,11 @@ guard = load('guard', ROOT / 'scripts/check-always-free-plan.py')
 
 
 class SafetyTests(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, {"OCI_TARGET_CONFIG_JSON": json.dumps(TARGET)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def plan(self, typ, after, actions=None):
         return {'resource_changes': [{'mode': 'managed', 'address': typ + '.grocery', 'type': typ,
                                       'change': {'after': after, 'actions': actions or ['create']}}]}
@@ -79,6 +88,14 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             backup.prune(client, 'namespace', 'bucket', names)
         self.assertEqual(client.delete_object.call_count, 1)
+
+    def test_backup_requires_explicit_approved_bucket(self):
+        approved = {'OCI_NAMESPACE': 'example', 'EXPECTED_OCI_NAMESPACE': 'example',
+                    'BACKUP_BUCKET': 'example-backups', 'EXPECTED_BACKUP_BUCKET': 'example-backups'}
+        self.assertEqual(backup.backup_target(approved), ('example', 'example-backups'))
+        for change in [{'BACKUP_BUCKET': 'other'}, {'OCI_NAMESPACE': 'other'}, {'EXPECTED_BACKUP_BUCKET': ''}]:
+            with self.assertRaises(ValueError):
+                backup.backup_target(approved | change)
 
     def test_backup_refuses_plaintext_or_wrong_database_endpoint(self):
         for url in ['postgresql://backup:password@public.example/postgres?sslmode=verify-full',

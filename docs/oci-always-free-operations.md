@@ -1,53 +1,72 @@
 # Always Free operator runbook
 
-**Current state, October 8, 2026:** canonical production is live at https://grocery.shnekendorf.com, reserved IP `129.159.189.16`. The operator completed a production shopping run. PostgreSQL runs inside Kubernetes; there is no managed PostgreSQL service in the target tenancy. Both daily backups and shopping-timeout jobs are enabled. The old grocery environment and its dedicated deployment access were retired October 8 after explicit waiver of the hold and first scheduled-backup gate. Its Vault/key are pending OCI deletion until November 7. The migration is merged into `master` and application delivery is enabled in `restore-existing` mode; hourly backup alerts are active from `master`.
+**Current state, October 8, 2026:** canonical production is live at https://grocery.example.com, reserved IP `${PRODUCTION_IPV4}`. The operator completed a production shopping run. PostgreSQL runs inside Kubernetes; there is no managed PostgreSQL service in the target tenancy. Both daily backups and shopping-timeout jobs are enabled. The old grocery environment and its dedicated deployment access were retired October 8 after explicit waiver of the hold and first scheduled-backup gate. Its Vault/key are pending OCI deletion until November 7. The migration is merged into `master` and application delivery is enabled in `restore-existing` mode; hourly backup alerts are active from `master`.
 
 See [architecture and tool choices](oci-deployment-plan.md), [execution record](oci-always-free-checkpoints.md), and [historical migration design](oci-always-free-design.md).
 
 ## Target identity and access
 
+The scripts require `OCI_TARGET_CONFIG_FILE` pointing to a mode-0600 JSON file outside tracked source. CI reads the same approved values from the `always-free` environment secret `OCI_TARGET_CONFIG`, masks each value before authentication and writes a private runner file. Missing configuration stops the operation; it never discovers a replacement target or falls back to another profile. Terraform provider inputs are compared with `approved_target`, and the plan guard independently compares the plan with this private record.
+
+For a local operator session:
+
+```bash
+export OCI_TARGET_CONFIG_FILE="/private/path/to/target.json"
+target_exports="$(python3 scripts/oci_target.py --shell)"
+eval "$target_exports"
+export OCI_CLI_PROFILE="$OCI_OPERATOR_PROFILE"
+export OPERATOR_KUBECONFIG="/private/path/to/operator-kubeconfig"
+export OPERATOR_KUBE_CONTEXT="operator-context"
+```
+
+Required configuration keys: `tenancy_ocid`, `compartment_ocid`, `region`, `namespace`, `cluster_ocid`, `state_bucket`, `backup_bucket`, `operator_profile`, `wif_domain_url`, `wif_client_id`, `wif_service_user_ocid`, `wif_audience`, `node_image_id`, `node_availability_domain`, `app_hostname`, `caddy_acme_email`, and `backup_age_recipient`. Obtain these from the operator's private inventory; do not populate a tracked example with live values.
+
+The backup image also requires explicit `EXPECTED_OCI_NAMESPACE` and `EXPECTED_BACKUP_BUCKET`. The foundation supplies these from private configuration. Updating that image and the CronJob configuration together requires a separately reviewed foundation plan; source redaction alone does not change the running backup job.
+
+Public examples use placeholders. Load the approved target from an ignored local configuration file (mode 0600), or the protected `always-free` environment configuration in GitHub. Never paste real OCI identifiers, profile details or kubeconfigs into tracked documentation. Set `OPERATOR_KUBECONFIG` and `OPERATOR_KUBE_CONTEXT` locally before running the examples; example hostnames are not production endpoints.
+
 | Setting | Value |
 |---|---|
-| OCI profile / region | `EDFREETIER` / `us-ashburn-1` |
-| Tenancy / compartment | `edfreetier` / `grocery` |
-| Object namespace | `iddiywf0v4j6` |
-| Terraform state bucket | `grocery-always-free-tfstate` |
-| Backup bucket | `grocery-always-free-backups` |
+| OCI profile / region | `${OCI_CLI_PROFILE}` / `us-ashburn-1` |
+| Tenancy / compartment | `${OCI_TENANCY_NAME}` / `${OCI_COMPARTMENT_NAME}` |
+| Object namespace | `${OCI_OBJECT_NAMESPACE}` |
+| Terraform state bucket | `${OCI_STATE_BUCKET}` |
+| Backup bucket | `${OCI_BACKUP_BUCKET}` |
 | Kubernetes namespace | `grocery` |
-| Operator kubeconfig / context | `.always-free/edfreetier-kubeconfig` / `edfreetier-grocery` |
-| Cluster | `ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq` |
+| Operator kubeconfig / context | `${OPERATOR_KUBECONFIG}` / `${OPERATOR_KUBE_CONTEXT}` |
+| Cluster | `${OCI_CLUSTER_OCID}` |
 
-The kubeconfig's OCI exec command uses the absolute OCI CLI path and explicitly selects `EDFREETIER`, Ashburn and API-key authentication. This avoids Lens inheriting another profile or token mode. Import the distinct context into Lens. If Lens shows 401 while cached node views work, test fresh namespace/pod listing with this file, verify its exec arguments/profile and restart the connection after correcting them. Never copy CI service credentials into Lens.
+The kubeconfig's OCI exec command uses the absolute OCI CLI path and explicitly selects `${OCI_CLI_PROFILE}`, Ashburn and API-key authentication. This avoids Lens inheriting another profile or token mode. Import the distinct context into Lens. If Lens shows 401 while cached node views work, test fresh namespace/pod listing with this file, verify its exec arguments/profile and restart the connection after correcting them. Never copy CI service credentials into Lens.
 
 Generate a fresh operator config only with the intended identity:
 
 ```bash
-oci --profile EDFREETIER ce cluster create-kubeconfig \
-  --cluster-id 'ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq' \
-  --file .always-free/edfreetier-kubeconfig --region us-ashburn-1 --auth api_key \
+oci --profile ${OCI_CLI_PROFILE} ce cluster create-kubeconfig \
+  --cluster-id "${OCI_CLUSTER_OCID}" \
+  --file "${OPERATOR_KUBECONFIG}" --region us-ashburn-1 --auth api_key \
   --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT --with-auth-context
 ```
 
 OCI generates its own context name. For a fresh file, rename that generated context before using the commands below:
 
 ```bash
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig config rename-context \
-  "$(kubectl --kubeconfig .always-free/edfreetier-kubeconfig config current-context)" edfreetier-grocery
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" config rename-context \
+  "$(kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" config current-context)" "${OPERATOR_KUBE_CONTEXT}"
 command -v oci
 ```
 
-In that file's `users[].user.exec`, set `command` to the absolute path reported by `command -v oci`, and verify the arguments include `--profile EDFREETIER`, `--region us-ashburn-1`, and `--auth api_key`. Inspect only the exec settings; do not dump kubeconfigs containing credentials into logs. Verify a fresh pod list before importing the file into Lens. If updating an existing operator file, preserve its distinct context name and avoid creating duplicate contexts.
+In that file's `users[].user.exec`, set `command` to the absolute path reported by `command -v oci`, and verify the arguments include `--profile ${OCI_CLI_PROFILE}`, `--region us-ashburn-1`, and `--auth api_key`. Inspect only the exec settings; do not dump kubeconfigs containing credentials into logs. Verify a fresh pod list before importing the file into Lens. If updating an existing operator file, preserve its distinct context name and avoid creating duplicate contexts.
 
 Use a separate MFA/security-token human profile when configured; its exec authentication must match that profile. Keep kubeconfig private and keep contexts distinct. API source access is currently public IPv4 TCP 6443 by explicit operator decision; TLS, IAM and RBAC remain required. Database, worker and kubelet ports are private.
 
 ## Routine health checks
 
 ```bash
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery get nodes -L kubernetes.io/arch
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery -n grocery get deployments,statefulsets,pods,cronjobs,jobs,pvc
-curl --fail --show-error https://grocery.shnekendorf.com/api/health/ready
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" get nodes -L kubernetes.io/arch
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" -n grocery get deployments,statefulsets,pods,cronjobs,jobs,pvc
+curl --fail --show-error https://grocery.example.com/api/health/ready
 python3 -B scripts/check-backup-health.py \
-  --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery --oci-profile EDFREETIER
+  --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" --oci-profile ${OCI_CLI_PROFILE}
 ```
 
 Expect exactly one Ready ARM64 worker, one app and Caddy replica, `postgres-0` Ready, Bound `platform-data`, and both CronJobs unsuspended. Check disk space inside PostgreSQL and Caddy, Node Allocatable and actual memory/disk use. Backup alerts do not cover disk, app uptime, node health or certificate expiry. The last five complete backups are recovery copies, not an unlimited historical archive.
@@ -63,7 +82,7 @@ Run from the reviewed migration/default-branch checkout:
 
 Provide current target-only inputs through `TF_VAR_*` or `ALWAYS_FREE_VARS_FILE` pointing to an absolute ignored file. The helper stages tracked sources and lockfiles in private `.always-free/terraform/ROOT`, ignores legacy root-local files, verifies the authenticated namespace and rejects unsupported resource changes. Plans/state contain generated credentials; never commit, print, or publish them as Actions artifacts.
 
-After reviewing a plan, set `CONFIRM_APPLY_SHA` to the full reviewed commit and use the same root with `apply`; it regenerates/checks the plan before applying. The GitHub **OCI Always Free infrastructure** workflow supports `production` or `cluster-foundation` with `plan`/`apply` and the full `confirm_apply_sha`. It authenticates through `always-free`. Local `EDFREETIER` administrator operations own the `tenancy-identity` and initial `bootstrap` roots.
+After reviewing a plan, set `CONFIRM_APPLY_SHA` to the full reviewed commit and use the same root with `apply`; it regenerates/checks the plan before applying. The GitHub **OCI Always Free infrastructure** workflow supports `production` or `cluster-foundation` with `plan`/`apply` and the full `confirm_apply_sha`. It authenticates through `always-free`. Local `${OCI_CLI_PROFILE}` administrator operations own the `tenancy-identity` and initial `bootstrap` roots.
 
 Preserve `OCI_BACKUPS_ENABLED=true` in `always-free` and the corresponding `backups_enabled=true` local input. Foundation's source default is false for a new installation; omitting the live setting would pause production backups. Verify the plan leaves schedules enabled. Do not replace/destroy the retained shared PVC or remove its lifecycle guard to make a plan pass.
 
@@ -80,7 +99,7 @@ PostgreSQL 16 Bookworm uses database `postgres`, `UTF8` and `C.UTF-8`. The sourc
 Use authenticated Kubernetes port-forwarding, not OCI Bastion or a public database IP:
 
 ```bash
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery \
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" \
   -n grocery port-forward service/postgres 5433:5432
 ```
 
@@ -93,7 +112,7 @@ In a second terminal, export the public database CA privately from `postgres-ca`
 To create an extra recovery point, verify no application/foundation deployment or restore is running or queued, no backup Job is active, and the scheduled backup will not overlap. A manual Kubernetes Job bypasses GitHub Actions concurrency; do not start a deployment/restore while it runs. Then run:
 
 ```bash
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery -n grocery \
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" -n grocery \
   create job "grocery-backup-manual-$(date -u +%Y%m%d%H%M%S)" --from=cronjob/grocery-postgres-backup
 ```
 
@@ -107,14 +126,14 @@ For actual disaster recovery, freeze writes and both schedules, wait for active 
 
 ## Application releases and failed deployments
 
-The `always-free` environment holds production Google/session secrets, canonical `OCI_APP_HOSTNAME=grocery.shnekendorf.com`, the backup image digest, `OCI_BACKUPS_ENABLED=true` and `OCI_BACKUP_MONITOR_ENABLED=true`. Keep secrets out of GitHub variables. [Deployment details](../deploy/README.md) cover restore-aware release behavior.
+The `always-free` environment holds production Google/session secrets, canonical `OCI_APP_HOSTNAME=grocery.example.com`, the backup image digest, `OCI_BACKUPS_ENABLED=true` and `OCI_BACKUP_MONITOR_ENABLED=true`. Keep secrets out of GitHub variables. [Deployment details](../deploy/README.md) cover restore-aware release behavior.
 
 The application workflow uses immutable GHCR images, an owner migration Job, runtime app credentials and the existing `grocery-bootstrap-state`. It pauses backup/shopping jobs and waits for active maintenance jobs before migrations. Successful public readiness resumes shopping cleanup and restores the backup schedule's prior enabled state. A failed deployment leaves maintenance paused for inspection. Restore the previous application image only when schema compatibility is established; migrations are never automatically reversed.
 
 A successful retry after failure can still leave backups paused: it sees the schedule was already suspended at the start. After reviewing the recovery, confirming public readiness and no active deployment/restore, explicitly resume `grocery-postgres-backup` and verify `grocery-shopping-timeout` is also enabled. For example:
 
 ```bash
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery -n grocery \
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" -n grocery \
   patch cronjob grocery-postgres-backup --type=merge --patch='{"spec":{"suspend":false}}'
 ```
 

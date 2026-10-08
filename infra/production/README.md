@@ -10,6 +10,6 @@ Copy only this branch's example into an ignored new-environment variables file. 
 
 ## External DNS setup (GoDaddy)
 
-After foundation creates the fixed 10/10 Mbps load balancer, read `reserved_public_ip` from the **new** production state. The canonical `grocery.shnekendorf.com` A record now points to `129.159.189.16`; it has no AAAA record. Manually update it only after a reviewed reserved-IP change. The rehearsal hostname is not the production route. Terraform creates no DNS zone/record.
+After foundation creates the fixed 10/10 Mbps load balancer, read `reserved_public_ip` from the **new** production state. The canonical `grocery.example.com` A record now points to `${PRODUCTION_IPV4}`; it has no AAAA record. Manually update it only after a reviewed reserved-IP change. The rehearsal hostname is not the production route. Terraform creates no DNS zone/record.
 
 For a future separate rehearsal, do not change the canonical production record during initial provisioning. The final cutover runbook explicitly freezes writes and transfers the final database before changing that record. Caddy handles certificate issuance and renewal using port 80/443 validation; no GoDaddy API key is needed.

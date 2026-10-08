@@ -2,7 +2,7 @@
 
 **Historical preflight:** these are October 5 observations, not current deployed usage or quota values. Provisioning and production cutover subsequently passed October 8. Use the [current architecture/tools](oci-deployment-plan.md) and [operator runbook](oci-always-free-operations.md); requery tenancy-wide limits/usage before adding another app.
 
-Checked October 5, 2026 using OCI CLI profile `EDFREETIER`. All API operations were read-only; no infrastructure, IAM, GitHub environment, or DNS was changed. These findings supplement the [proposed design and migration runbook](oci-always-free-design.md).
+Checked October 5, 2026 using OCI CLI profile `${OCI_CLI_PROFILE}`. All API operations were read-only; no infrastructure, IAM, GitHub environment, or DNS was changed. These findings supplement the [proposed design and migration runbook](oci-always-free-design.md).
 
 The operator confirmed the Console plan is **Free Tier**, with no expiration displayed, and account creation on October 5. The operator expects the initial trial to end after approximately one month; an exact transition date is not established by the Console information provided. Repeat free-only entitlement checks after that transition. Subsequent branch/GitHub setup is recorded in [execution checkpoints](oci-always-free-checkpoints.md); it does not change the read-only nature of the preflight checks below.
 
@@ -10,14 +10,14 @@ The operator confirmed the Console plan is **Free Tier**, with no expiration dis
 
 | Setting | Verified value |
 |---|---|
-| Local profile | `EDFREETIER`, in `/Users/eshneken/.oci/config` |
-| Tenancy name | `edfreetier` |
-| Tenancy OCID | `ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua` |
-| Compartment | `grocery`, ACTIVE, directly under the verified tenancy |
-| Compartment OCID | `ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa` |
+| Local profile | `${OCI_CLI_PROFILE}`, in `~/.oci/config` |
+| Tenancy name | `${OCI_TENANCY_NAME}` |
+| Tenancy OCID | `${OCI_TENANCY_OCID}` |
+| Compartment | `${OCI_COMPARTMENT_NAME}`, ACTIVE, directly under the verified tenancy |
+| Compartment OCID | `${OCI_COMPARTMENT_OCID}` |
 | Home/target region | `us-ashburn-1` / Ashburn; region subscription READY |
-| Object Storage namespace | `iddiywf0v4j6` |
-| Availability domains | `oYVn:US-ASHBURN-AD-1`, `oYVn:US-ASHBURN-AD-2`, `oYVn:US-ASHBURN-AD-3` |
+| Object Storage namespace | `${OCI_OBJECT_NAMESPACE}` |
+| Availability domains | `${OCI_AD_PREFIX}:US-ASHBURN-AD-1`, `${OCI_AD_PREFIX}:US-ASHBURN-AD-2`, `${OCI_AD_PREFIX}:US-ASHBURN-AD-3` |
 
 The profile authenticates successfully. Do not substitute another profile or a default tenancy during subsequent work. Private keys, fingerprints, passwords, and tokens are not recorded here.
 
@@ -47,8 +47,8 @@ Node-pool options queried specifically for `v1.36.4` and `aarch64` include `VM.S
 
 | Image name | Image OCID |
 |---|---|
-| `Oracle-Linux-9.8-aarch64-2026.08.14-0-OKE-1.36.4-1820` | `ocid1.image.oc1.iad.aaaaaaaaq45fqvrmfngvzptbuis2lrinuc4kawc5z5roalcuvlgcptc3fu7q` |
-| `Oracle-Linux-8.10-aarch64-2026.08.14-0-OKE-1.36.4-1820` | `ocid1.image.oc1.iad.aaaaaaaaacfk3xybe5zevvge6zftwt4qpsp4ywo3tpqdqseyijjj25rfevua` |
+| `Oracle-Linux-9.8-aarch64-2026.08.14-0-OKE-1.36.4-1820` | `${OCI_IMAGE_OCID}` |
+| `Oracle-Linux-8.10-aarch64-2026.08.14-0-OKE-1.36.4-1820` | `${OCI_IMAGE_OCID}` |
 
 Prefer the eligible Oracle Linux 9 image after compatibility validation; pin the reviewed image explicitly rather than relying on the first array entry. Requery immediately before provisioning for newer production-supported versions/images. IMDSv1 must be disabled in launch configuration; no worker exists yet to inspect.
 

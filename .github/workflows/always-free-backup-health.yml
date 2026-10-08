@@ -18,6 +18,9 @@ jobs:
       id-token: write
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+      - uses: ./.github/actions/load-oci-target
+        with:
+          configuration: ${{ secrets.OCI_TARGET_CONFIG }}
       - name: Check activation
         id: gate
         env:
@@ -32,19 +35,19 @@ jobs:
       - uses: ./.github/actions/setup-always-free-monitor-wif
         if: steps.gate.outputs.enabled == 'true'
         with:
-          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
-          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          domain-url: ${{ env.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ env.OCI_WIF_CLIENT_ID }}
           client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
-          audience: ${{ vars.OCI_WIF_AUDIENCE }}
-          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
-          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
-          region: ${{ vars.OCI_REGION }}
+          audience: ${{ env.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ env.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ env.OCI_TENANCY_OCID }}
+          region: ${{ env.OCI_REGION }}
       - name: Create target kubeconfig
         if: steps.gate.outputs.enabled == 'true'
         run: |
           set -euo pipefail
           oci ce cluster create-kubeconfig \
-            --cluster-id ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq \
+            --cluster-id "$OCI_CLUSTER_OCID" \
             --file "$RUNNER_TEMP/oke-kubeconfig" --region us-ashburn-1 \
             --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT \
             --with-auth-context --auth security_token --profile DEFAULT

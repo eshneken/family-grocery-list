@@ -1,7 +1,13 @@
+variable "approved_target" {
+  description = "Reviewed target identity from private operator/environment configuration."
+  type        = object({ tenancy_ocid = string, compartment_ocid = string, region = string })
+  sensitive   = true
+}
+
 variable "tenancy_ocid" {
   validation {
-    condition     = var.tenancy_ocid == "ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua"
-    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+    condition     = var.tenancy_ocid == var.approved_target.tenancy_ocid
+    error_message = "Inputs must match the approved private target; do not reuse legacy state."
   }
   type      = string
   sensitive = true
@@ -9,8 +15,8 @@ variable "tenancy_ocid" {
 
 variable "compartment_ocid" {
   validation {
-    condition     = var.compartment_ocid == "ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa"
-    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+    condition     = var.compartment_ocid == var.approved_target.compartment_ocid
+    error_message = "Inputs must match the approved private target; do not reuse legacy state."
   }
   type      = string
   sensitive = true
@@ -19,7 +25,7 @@ variable "compartment_ocid" {
 variable "region" {
   validation {
     condition     = var.region == "us-ashburn-1"
-    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse legacy state."
   }
   type = string
 }
@@ -111,12 +117,8 @@ variable "tags" {
 }
 
 variable "oci_config_profile" {
-  type    = string
-  default = "EDFREETIER"
-  validation {
-    condition     = contains(["EDFREETIER", "DEFAULT"], var.oci_config_profile)
-    error_message = "Use EDFREETIER locally or DEFAULT for short-lived GitHub federation."
-  }
+  description = "Explicit operator or short-lived federation profile; supplied privately."
+  type        = string
 }
 
 variable "node_shape" {
