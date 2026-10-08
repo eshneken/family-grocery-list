@@ -8,8 +8,7 @@ import subprocess
 import sys
 
 UTC = datetime.timezone.utc
-NAMESPACE = "iddiywf0v4j6"
-CLUSTER_ID = "ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq"
+from oci_target import load_target
 PATTERN = re.compile(r"^postgres/(\d{8}T\d{6}Z-[a-f0-9]{32})\.(json|dump\.age)$")
 
 
@@ -71,12 +70,13 @@ def evaluate(objects, jobs, now):
     }
 
 
-def verify_target(config, context_name):
+def verify_target(config, context_name, target=None):
+    target = target or load_target()
     context = next(c["context"] for c in config["contexts"] if c["name"] == context_name)
     user = next(u["user"] for u in config["users"] if u["name"] == context["user"])
     args = user["exec"]["args"]
     cluster_args = [args[i + 1] for i, value in enumerate(args[:-1]) if value == "--cluster-id"]
-    if cluster_args != [CLUSTER_ID]:
+    if cluster_args != [target['cluster_ocid']]:
         raise ValueError("Unexpected target cluster")
 
 
@@ -94,11 +94,12 @@ def main():
     parser.add_argument("--kubeconfig", required=True)
     parser.add_argument("--context", required=True)
     parser.add_argument("--kubectl", default="kubectl")
-    parser.add_argument("--oci-profile", default="EDFREETIER")
+    parser.add_argument("--oci-profile", required=True)
     parser.add_argument("--oci-auth", choices=["api_key", "security_token"], default="api_key")
     parser.add_argument("--allow-suspended", action="store_true", help="Rehearsal checks only")
     parser.add_argument("--report")
     args = parser.parse_args()
+    target = load_target()
 
     def run(command):
         result = subprocess.run(command, capture_output=True, text=True, timeout=60)
@@ -108,12 +109,12 @@ def main():
         return result.stdout
 
     identity = ["--profile", args.oci_profile, "--auth", args.oci_auth, "--region", "us-ashburn-1"]
-    if json.loads(run(["oci", "os", "ns", "get"] + identity))["data"] != NAMESPACE:
+    if json.loads(run(["oci", "os", "ns", "get"] + identity))["data"] != target['namespace']:
         raise ValueError("Unexpected tenancy namespace")
     kube = [args.kubectl, "--kubeconfig", args.kubeconfig, "--context", args.context, "-n", "grocery"]
-    verify_target(json.loads(run(kube + ["config", "view", "-o", "json"])), args.context)
-    objects = object_list(run(["oci", "os", "object", "list", "--namespace-name", NAMESPACE,
-                               "--bucket-name", "grocery-always-free-backups", "--all"] + identity))
+    verify_target(json.loads(run(kube + ["config", "view", "-o", "json"])), args.context, target)
+    objects = object_list(run(["oci", "os", "object", "list", "--namespace-name", target["namespace"],
+                               "--bucket-name", target["backup_bucket"], "--all"] + identity))
     jobs = json.loads(run(kube + ["get", "jobs", "-o", "json"]))["items"]
     cron = json.loads(run(kube + ["get", "cronjob", "grocery-postgres-backup", "-o", "json"]))
     result = evaluate(objects, jobs, datetime.datetime.now(UTC))

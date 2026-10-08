@@ -54,11 +54,11 @@ The local and production clients represent the same application, so they can and
 2. Open **Google Auth Platform** > **Branding** and review the shared consent screen:
    - App name: `Family Grocery List`
    - User support email: an address you monitor
-   - Authorized domain: `shnekendorf.com`
+   - Authorized domain: `example.com`
    - Developer contact email: an address you monitor
    - If publishing the app, add the public application home page and the policy URLs Google requires. Do not enter placeholder or login-protected URLs.
 
-   Adding `shnekendorf.com` permits the project's clients to use that domain and its subdomains. It does not remove or invalidate the local client's `localhost` redirect; localhost is a special development exception and is not entered as an authorized domain.
+   Adding `example.com` permits the project's clients to use that domain and its subdomains. It does not remove or invalidate the local client's `localhost` redirect; localhost is a special development exception and is not entered as an authorized domain.
 
 3. Open **Audience** and select **External** for consumer Gmail accounts. If every intended user belongs to the same managed Google Workspace organization, **Internal** is also valid but blocks all accounts outside that organization.
 4. The application requests only the standard `openid`, `email`, and `profile` sign-in scopes. Google exempts this scope set from Testing mode's test-user restriction, warning, and seven-day authorization expiration. For this personal deployment, leaving the shared project in **Testing** is acceptable. Publishing it is optional; if you choose **Publish app**, complete the branding, domain-ownership, and policy-page requirements shown by the console.
@@ -68,7 +68,7 @@ The local and production clients represent the same application, so they can and
 8. Add this **Authorized redirect URI** exactly, with no trailing slash:
 
    ```text
-   https://grocery.shnekendorf.com/api/auth/callback/google
+   https://grocery.example.com/api/auth/callback/google
    ```
 
    Google compares the scheme, hostname, port, path, case, and trailing slash exactly. Production redirect URIs must use HTTPS. Do not add `localhost`, an IP address, a wildcard, or a preview hostname to this client.
@@ -93,12 +93,12 @@ Public DNS is hosted externally at GoDaddy. After infrastructure creates or chan
 Before starting or rerunning a production deployment, verify DNS and TLS reach Caddy rather than a localhost service:
 
 ```bash
-curl --show-error --head https://grocery.shnekendorf.com/
+curl --show-error --head https://grocery.example.com/
 ```
 
 Before the first application deployment, an HTTP `502` with `server: Caddy` is expected because Caddy has no application upstream yet. A DNS error, certificate error, or response from an unrelated server is not expected.
 
-After deployment, open `https://grocery.shnekendorf.com`, select **Sign in with Google**, and complete one login with `INITIAL_ADMIN_EMAIL`. A `redirect_uri_mismatch` response means the URI in step 8 or the deployed client ID does not match. An `org_internal` response means the project is restricted to a Google Workspace organization that does not contain the signing-in account.
+After deployment, open `https://grocery.example.com`, select **Sign in with Google**, and complete one login with `INITIAL_ADMIN_EMAIL`. A `redirect_uri_mismatch` response means the URI in step 8 or the deployed client ID does not match. An `org_internal` response means the project is restricted to a Google Workspace organization that does not contain the signing-in account.
 
 Google's [web-server OAuth guide](https://developers.google.com/identity/protocols/oauth2/web-server) documents exact redirect URI matching, and [Manage App Audience](https://support.google.com/cloud/answer/15549945) describes Testing and In production behavior.
 
@@ -135,7 +135,7 @@ The production bootstrap is non-destructive. It creates the household, initial G
 Inspect the marker with:
 
 ```bash
-kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery \
+kubectl --kubeconfig "${OPERATOR_KUBECONFIG}" --context "${OPERATOR_KUBE_CONTEXT}" \
   --namespace grocery get configmap grocery-bootstrap-state --output=yaml
 ```
 

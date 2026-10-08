@@ -133,6 +133,7 @@ runs:
             --raw-output
         )"
         test -n "$namespace"
+        echo "::add-mask::$namespace"
 
         {
           echo "OCI_CONFIG_FILE=${wif_dir}/config"

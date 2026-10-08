@@ -1,11 +1,18 @@
-tenancy_ocid = "ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua"
-compartment_ocid = "ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa"
+# Examples only. Obtain deployed values from ignored private configuration.
+approved_target = {
+  tenancy_ocid = "REPLACE_TENANCY_OCID"
+  compartment_ocid = "REPLACE_COMPARTMENT_OCID"
+  region = "us-ashburn-1"
+}
+backup_bucket_name = "REPLACE_BACKUP_BUCKET"
+tenancy_ocid = "REPLACE_TENANCY_OCID"
+compartment_ocid = "REPLACE_COMPARTMENT_OCID"
 region = "us-ashburn-1"
-oci_config_profile = "EDFREETIER"
-app_hostname = "grocery-free.shnekendorf.com"
+oci_config_profile = "REPLACE_OPERATOR_PROFILE"
+app_hostname = "grocery-free.example.com"
 oke_kubernetes_version = "v1.36.4"
-node_image_id = "ocid1.image.oc1.iad.aaaaaaaaq45fqvrmfngvzptbuis2lrinuc4kawc5z5roalcuvlgcptc3fu7q"
-node_availability_domain = "oYVn:US-ASHBURN-AD-1"
+node_image_id = "REPLACE_ARM_IMAGE_OCID"
+node_availability_domain = "REPLACE_AVAILABILITY_DOMAIN"
 enable_bastion = false
 # Optional troubleshooting only: node_ssh_public_key = "ssh-ed25519 YOUR_PUBLIC_KEY"
 bastion_client_cidr = "203.0.113.14/32" # Optional Bastion client access; does not restrict Lens/API.

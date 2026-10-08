@@ -5,6 +5,10 @@ import io
 from pathlib import Path
 import tempfile
 import unittest
+import os
+import json
+from unittest.mock import patch
+from oci_target_fixture import TARGET
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("bootstrap", Path(__file__).with_name("bootstrap-always-free-wif.py"))
@@ -13,6 +17,11 @@ spec.loader.exec_module(bootstrap)
 
 
 class BootstrapTests(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, {"OCI_TARGET_CONFIG_JSON": json.dumps(TARGET)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_only_approved_repository_environment_is_trusted(self):
         trust = bootstrap.payload("runtime-client", "domain-user")
         self.assertEqual(trust["issuer"], "https://token.actions.githubusercontent.com")
@@ -23,8 +32,8 @@ class BootstrapTests(unittest.TestCase):
         }])
 
     def test_wrong_profile_and_region_fail_closed(self):
-        for content in ["[DEFAULT]\ntenancy=old\n", "[EDFREETIER]\ntenancy=old\nregion=us-ashburn-1\n",
-                        "[EDFREETIER]\ntenancy=" + bootstrap.TENANCY + "\nregion=us-phoenix-1\n"]:
+        for content in ["[DEFAULT]\ntenancy=old\n", "[EXAMPLE_OPERATOR]\ntenancy=old\nregion=us-ashburn-1\n",
+                        "[EXAMPLE_OPERATOR]\ntenancy=" + TARGET["tenancy_ocid"] + "\nregion=us-phoenix-1\n"]:
             with tempfile.TemporaryDirectory() as directory:
                 config = Path(directory) / "config"
                 config.write_text(content)
@@ -36,7 +45,7 @@ class BootstrapTests(unittest.TestCase):
             bootstrap.payload("", "user")
 
     def run_main(self, api_results, compartment=None, service_user=True):
-        identity = {"data": compartment or {"compartment-id": bootstrap.TENANCY, "lifecycle-state": "ACTIVE"}}
+        identity = {"data": compartment or {"compartment-id": TARGET["tenancy_ocid"], "lifecycle-state": "ACTIVE"}}
         users = {"data": {"resources": [{"id": "domain-user", "urn-ietf-params-scim-schemas-oracle-idcs-extension-user-user": {"service-user": service_user}}]}}
         arguments = ["bootstrap", "--runtime-client-id", "runtime", "--service-user-ocid", "ocid1.user.oc1..test", "--admin-client-id", "admin"]
         output = io.StringIO()

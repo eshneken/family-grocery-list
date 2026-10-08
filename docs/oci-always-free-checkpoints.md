@@ -1,12 +1,12 @@
 # OCI Always Free execution checkpoints
 
-**Latest checkpoint, October 8, 2026:** canonical production is live at `129.159.189.16`; a real production shopping run completed successfully. The single AD-3 ARM64 worker, Kubernetes PostgreSQL, shared storage, Caddy and 10/10 Mbps flexible LB are healthy. Daily backups are enabled; delivered GitHub failure notification and a healthy production monitor run were verified. Old foundation/platform/state storage and dedicated access were retired locally after explicit operator waiver of the hold and scheduled-backup gate. The old Vault/key are pending deletion November 7; the migration is merged and default-branch application delivery is enabled. Entries below are dated implementation history, not current provisioning status. Use the [current runbook](oci-always-free-operations.md).
+**Latest checkpoint, October 8, 2026:** canonical production is live at `${PRODUCTION_IPV4}`; a real production shopping run completed successfully. The single AD-3 ARM64 worker, Kubernetes PostgreSQL, shared storage, Caddy and 10/10 Mbps flexible LB are healthy. Daily backups are enabled; delivered GitHub failure notification and a healthy production monitor run were verified. Old foundation/platform/state storage and dedicated access were retired locally after explicit operator waiver of the hold and scheduled-backup gate. The old Vault/key are pending deletion November 7; the migration is merged and default-branch application delivery is enabled. Entries below are dated implementation history, not current provisioning status. Use the [current runbook](oci-always-free-operations.md).
 
 Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Checkpoint **2 — infrastructure implementation/review — passed**. Administrator IAM and state/bootstrap prerequisites were provisioned October 6; the Basic OKE control plane is now active, while worker provisioning awaits A1 capacity. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
 
 ## Production acceptance and retirement preparation — October 8
 
-- Canonical DNS and HTTPS reach `129.159.189.16`; database-aware readiness and Google authorization/callback checks passed. The operator completed a new production shopping run successfully.
+- Canonical DNS and HTTPS reach `${PRODUCTION_IPV4}`; database-aware readiness and Google authorization/callback checks passed. The operator completed a new production shopping run successfully.
 - Daily backups at 09:00 UTC and shopping timeout every 15 minutes are enabled. First production backup-health run [37799818126](https://github.com/eshneken/family-grocery-list/actions/runs/37799818126) passed; the operator confirmed delivered failure notifications after the controlled test. The first naturally scheduled database backup is still pending.
 - A fresh backup after the production shopping run was checksum-verified, decrypted with the operator's off-cloud key, and restored to a scratch database. All 12 application/migration tables, the new shopping run, valid indexes and constraints were verified. Scratch DB and plaintext were removed; an encrypted archive remains outside OCI.
 - Actual target allocation: one A1 2/12 worker with IMDSv1 disabled, 50 GB boot plus 50 GB data volume, and one active flexible LB with min/max 10 Mbps. This records application allocation, not all tenancy-wide remaining capacity.
@@ -31,17 +31,17 @@ Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federatio
 
 ### 1. Confirm account status
 
-Sign into tenancy **edfreetier**, region **Ashburn**. The dismissed banner is not needed: check **Billing & Cost Management → Upgrade and Manage Payment**, and the Console billing/account widget for any trial balance/days remaining. Record whether it is active Free Trial, Always Free only, or PAYG, plus the displayed trial end date if present. Do not perform an account upgrade as part of this checkpoint. Operator confirmation: plan **Free Tier**, created October 5, no expiration displayed. The expected initial trial transition is approximately one month after creation; the exact date remains unverified. [Oracle payment/account page](https://docs.oracle.com/en-us/iaas/Content/Billing/Tasks/changingpaymentmethod.htm), [billing widget](https://docs.oracle.com/en-us/iaas/Content/GSG/Concepts/console_topic-AccountCenter-Billing.htm)
+Sign into tenancy **${OCI_TENANCY_NAME}**, region **Ashburn**. The dismissed banner is not needed: check **Billing & Cost Management → Upgrade and Manage Payment**, and the Console billing/account widget for any trial balance/days remaining. Record whether it is active Free Trial, Always Free only, or PAYG, plus the displayed trial end date if present. Do not perform an account upgrade as part of this checkpoint. Operator confirmation: plan **Free Tier**, created October 5, no expiration displayed. The expected initial trial transition is approximately one month after creation; the exact date remains unverified. [Oracle payment/account page](https://docs.oracle.com/en-us/iaas/Content/Billing/Tasks/changingpaymentmethod.htm), [billing widget](https://docs.oracle.com/en-us/iaas/Content/GSG/Concepts/console_topic-AccountCenter-Billing.htm)
 
 ### 2. Create the deployment user, group, and policy
 
 In **Identity & Security → Domains → Default**, verify the domain URL is:
 
 ```text
-https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443
+https://idcs-${IDENTITY_DOMAIN_RESOURCE_ID}.identity.oraclecloud.com:443
 ```
 
-Create a true identity-domain service user named `grocery-github-service` with the SCIM extension `serviceUser: true` **at creation**. A regular Console-created user is insufficient, and this immutable flag cannot be changed afterward. Use the identity-domain administrator API described in [Oracle's service-user procedure](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/json_web_token_exchange.htm#step-3-optional-use-a-service-user), or an administrator-authenticated signed request with local `EDFREETIER` credentials:
+Create a true identity-domain service user named `grocery-github-service` with the SCIM extension `serviceUser: true` **at creation**. A regular Console-created user is insufficient, and this immutable flag cannot be changed afterward. Use the identity-domain administrator API described in [Oracle's service-user procedure](https://docs.oracle.com/en-us/iaas/Content/Identity/api-getstarted/json_web_token_exchange.htm#step-3-optional-use-a-service-user), or an administrator-authenticated signed request with local `${OCI_CLI_PROFILE}` credentials:
 
 ```bash
 cat > /private/tmp/grocery-service-user-rest.json <<'JSON'
@@ -53,8 +53,8 @@ cat > /private/tmp/grocery-service-user-rest.json <<'JSON'
   }
 }
 JSON
-oci raw-request --profile EDFREETIER --http-method POST \
-  --target-uri 'https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443/admin/v1/Users' \
+oci raw-request --profile ${OCI_CLI_PROFILE} --http-method POST \
+  --target-uri 'https://idcs-${IDENTITY_DOMAIN_RESOURCE_ID}.identity.oraclecloud.com:443/admin/v1/Users' \
   --request-body file:///private/tmp/grocery-service-user-rest.json
 ```
 
@@ -94,7 +94,7 @@ python3 scripts/bootstrap-always-free-wif.py \
   --admin-client-id '<temporary-admin-client-id>'
 ```
 
-It verifies `EDFREETIER` and the compartment before looking up the service user's identity-domain ID. It prompts for the temporary admin secret with hidden terminal input and creates one trust. No passwords or tokens are printed or passed as command-line arguments. It refuses to overwrite an existing trust; after a timeout/unknown result, rerun to detect an existing trust and inspect it before proceeding.
+It verifies `${OCI_CLI_PROFILE}` and the compartment before looking up the service user's identity-domain ID. It prompts for the temporary admin secret with hidden terminal input and creates one trust. No passwords or tokens are printed or passed as command-line arguments. It refuses to overwrite an existing trust; after a timeout/unknown result, rerun to detect an existing trust and inspect it before proceeding.
 
 Expected result: a nonempty trust ID, name `grocery-always-free-github-actions`, and `active: true`. The accepted issuer is GitHub, audience `grocery-always-free-github`, and subject exactly:
 
@@ -127,17 +127,17 @@ gh run list --workflow oci-wif-verify.yml --branch codex/oci-always-free --limit
 
 Or select the existing federation verification workflow under Actions, **Run workflow**, and choose the migration branch. Default-branch UI may still display the old workflow name; select the file `oci-wif-verify.yml`.
 
-Pass criteria: summary **Always-free OCI federation verification passed**, target `EDFREETIER / grocery / us-ashburn-1`, namespace `iddiywf0v4j6`, and green verification job. This proves token exchange and read-only namespace access; it does not yet prove Terraform write permissions, Basic OKE access, free billing, or backup node identity.
+Pass criteria: summary **Always-free OCI federation verification passed**, target `configured target tenancy / compartment / region`, namespace `${OCI_OBJECT_NAMESPACE}`, and green verification job. This proves token exchange and read-only namespace access; it does not yet prove Terraform write permissions, Basic OKE access, free billing, or backup node identity.
 
 After the verification passes, deactivate/delete the temporary administrator application. Keep the runtime application active. Record account status and successful workflow URL in this document; never record secret values.
 
 ## Federation verification record
 
 - Initial [run 37396881112](https://github.com/eshneken/family-grocery-list/actions/runs/37396881112) failed HTTP 401, `unauthorized_client`: “User requesting is not a service user.” The supplied `grocery-github-deployer` account had no `serviceUser` flag. OCI rejected conversion because the flag is immutable.
-- Created `grocery-github-service` with `serviceUser=true`, identity-domain ID `ed094f835ebf427fb32a38671d57027a`, OCI OCID `ocid1.user.oc1..aaaaaaaa3h3zbyyvhskidzw7jlptdqak6sx5vqtisepe2n2o4t4u72lkod5q`.
+- Created `grocery-github-service` with `serviceUser=true`, identity-domain ID `${IDENTITY_DOMAIN_RESOURCE_ID}`, OCI OCID `${OCI_USER_OCID}`.
 - Added the service user to `grocery-github-deployers`, replaced the existing trust's impersonation mapping, and updated the `always-free` GitHub variable `OCI_WIF_SERVICE_USER_OCID`. Removed the regular user from the deployment group; the regular account remains available for manual deletion.
 - Bootstrap helper now rejects a regular user before requesting the administrator token. Seven helper tests pass. Initial branch application CI [run 37381389786](https://github.com/eshneken/family-grocery-list/actions/runs/37381389786) passed unit/coverage and browser checks.
-- Retry [run 37397391548](https://github.com/eshneken/family-grocery-list/actions/runs/37397391548): **passed**. Token exchange succeeded, namespace matched `iddiywf0v4j6`, and the new-tenancy guard and verification record steps passed. No infrastructure or application was deployed. Terraform write permissions and backup instance-principal permissions remain for subsequent checkpoints.
+- Retry [run 37397391548](https://github.com/eshneken/family-grocery-list/actions/runs/37397391548): **passed**. Token exchange succeeded, namespace matched `${OCI_OBJECT_NAMESPACE}`, and the new-tenancy guard and verification record steps passed. No infrastructure or application was deployed. Terraform write permissions and backup instance-principal permissions remain for subsequent checkpoints.
 - **Cleanup verified October 6:** `grocery-wif-bootstrap-admin` is inactive through the identity-domain API; keep `grocery-github-actions` active. The unused regular account `grocery-github-deployer` may be deleted manually; it has been removed from the deployment group.
 
 ## Following checkpoints
@@ -166,14 +166,14 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - Target-bound bootstrap plan: **4 create, 0 change, 0 destroy** (state bucket, backup bucket, DEFAULT Vault, SOFTWARE key). Both passed the plan guard; neither was applied.
 - All four Terraform roots validated in isolated source-only working directories; shell/YAML checks and 12 Python checks passed.
 - [CI run 37507593734](https://github.com/eshneken/family-grocery-list/actions/runs/37507593734): all three jobs passed (unit tests/coverage, browser journeys, and actual pinned PostgreSQL TLS/role/dump/restore integration plus backup-tool image build).
-- ACME contact set to `eshneken@gmail.com`; public backup recipient set to `age1gqkvgjanavu7usylugw39sqcdsf970k696c9y9e42jl0wmjvrp7sx5v08e`. The private recovery key was generated/stored by the operator and was never read by Codex or uploaded to OCI/GitHub.
+- ACME contact set to `operator@example.com`; public backup recipient set to `${BACKUP_AGE_RECIPIENT}`. The private recovery key was generated/stored by the operator and was never read by Codex or uploaded to OCI/GitHub.
 - Reviewed initial ARM image and AD-1 recorded in GitHub variables; requery service options before actual provisioning. A1 physical capacity remains untested.
 
 ## October 6 prerequisite provisioning
 
 - Operator authorized proceeding after review. Commit `27f62a7` applied the four administrator IAM resources and four bootstrap resources: **8 created, 0 changed, 0 destroyed**.
 - State bucket is private Standard storage with versioning enabled; backup bucket is private Standard storage with versioning disabled. Vault is `DEFAULT / ACTIVE`; key is `SOFTWARE / ENABLED`.
-- Bootstrap state migrated successfully to `grocery-always-free-tfstate/bootstrap/terraform.tfstate`; remote object existence verified. Administrator IAM state was initially local; the subsequent remote migration supersedes the external-backup step.
+- Bootstrap state migrated successfully to `${OCI_STATE_BUCKET}/bootstrap/terraform.tfstate`; remote object existence verified. Administrator IAM state was initially local; the subsequent remote migration supersedes the external-backup step.
 - [Application CI run 37508862432](https://github.com/eshneken/family-grocery-list/actions/runs/37508862432) passed after final workflow/IAM changes.
 - [Backup-only image build 37508882814](https://github.com/eshneken/family-grocery-list/actions/runs/37508882814) passed; application build/deployment were skipped. Anonymous pull and ARM64/AMD64 manifests verified. `OCI_BACKUP_IMAGE` now pins `ghcr.io/eshneken/family-grocery-list-backup@sha256:d6f52f516585688c8b34f5a6c3498f0ed1f1829657adc86f19ec50e966a6a43e`. No package-visibility manual step was needed.
 - First OKE plan dispatch exposed a GitHub expression-scope validation error (`runner.temp` in job-level environment); moved it into step-level environment before retrying. No OKE/Compute/LB resources have been created and no data has been migrated.
@@ -184,7 +184,7 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 
 ### Next operator checkpoint
 
-1. In the EDFREETIER tenancy, verify the two private buckets in `grocery` and the `DEFAULT` Vault/software key. Do not change production DNS yet.
+1. In the ${OCI_CLI_PROFILE} tenancy, verify the two private buckets in `grocery` and the `DEFAULT` Vault/software key. Do not change production DNS yet.
 2. Administrator IAM state now also belongs in the private bucket under `tenancy-identity/terraform.tfstate`. The helper migrates the initial local state after bootstrap; no external state backup is needed once verified.
 3. Next authorized stage: apply the reviewed platform plan through GitHub, then verify the actual single worker/IMDS settings and Lens access before foundation storage/load-balancer installation. Physical A1 capacity can only be established during provisioning.
 
@@ -193,10 +193,10 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - Operator verified buckets and Vault in the Console and proceeded to the platform checkpoint.
 - Administrator IAM state migrated to the existing private bucket at `tenancy-identity/terraform.tfstate`; remote object and four managed resources verified, with a no-change refresh plan. External state backup is no longer a prerequisite. Administrator-only local execution remains enforced.
 
-- [Platform apply 37514156204](https://github.com/eshneken/family-grocery-list/actions/runs/37514156204) created the network, reserved IP, Vault database secrets/TLS, and **ACTIVE Basic OKE v1.36.4** control plane. Public API `143.47.104.94:6443` verified with the operator profile; namespace listing succeeded.
+- [Platform apply 37514156204](https://github.com/eshneken/family-grocery-list/actions/runs/37514156204) created the network, reserved IP, Vault database secrets/TLS, and **ACTIVE Basic OKE v1.36.4** control plane. Public API `${OPERATOR_PUBLIC_IP}:6443` verified with the operator profile; namespace listing succeeded.
 - The AD-1 A1 launch failed with Compute `Out of host capacity`. No worker was launched; OCI removed the failed node pool, while Terraform retained its partial state. Replan from the preserved remote state before retrying; never discard state or change to a paid shape. [Oracle capacity guidance](https://docs.oracle.com/en-us/iaas/Content/Compute/known-issues.htm#out-of-host-capacity-error-when-creating-compute-instances) recommends another AD or retry later.
-- `OCI_NODE_AVAILABILITY_DOMAIN` changed to `oYVn:US-ASHBURN-AD-2` for the next reviewed plan. The worker remains exactly A1 2/12 with 50 GB boot disk and IMDSv1 disabled.
-- Lens kubeconfig prepared at `.always-free/edfreetier-kubeconfig`, context `edfreetier-grocery`, absolute OCI CLI path and `EDFREETIER` operator profile. No service-user credentials are used. Worker readiness and live Compute IMDS verification remain pending.
+- `OCI_NODE_AVAILABILITY_DOMAIN` changed to `${OCI_AD_PREFIX}:US-ASHBURN-AD-2` for the next reviewed plan. The worker remains exactly A1 2/12 with 50 GB boot disk and IMDSv1 disabled.
+- Lens kubeconfig prepared at `${OPERATOR_KUBECONFIG}`, context `${OPERATOR_KUBE_CONTEXT}`, absolute OCI CLI path and `${OCI_CLI_PROFILE}` operator profile. No service-user credentials are used. Worker readiness and live Compute IMDS verification remain pending.
 - [CI 37514140702](https://github.com/eshneken/family-grocery-list/actions/runs/37514140702) passed all three jobs for the remote-state migration implementation.
 
 ### A1 capacity results and current hold point
@@ -205,7 +205,7 @@ Use the [full design/runbook](oci-always-free-design.md) for the exact data-tran
 - AD-3 recovery [plan 37516126069](https://github.com/eshneken/family-grocery-list/actions/runs/37516126069) also passed with one creation and no changes/deletions. [Apply 37516461489](https://github.com/eshneken/family-grocery-list/actions/runs/37516461489) launch work request failed with the same host-capacity error.
 - Point-in-time Compute capacity reports for the exact A1 2/12 shape also returned `OUT_OF_HOST_CAPACITY` in all three Ashburn ADs. `OCI_NODE_AVAILABILITY_DOMAIN` is currently AD-3 for a later retry.
 - No worker is running; actual Compute IMDS/boot-volume/tag and Kubernetes node-readiness checks remain pending. Foundation storage, PostgreSQL, Caddy/LB, DNS changes and data migration have not started. Old environment/master are intact.
-- Operator manual checkpoint: import `.always-free/edfreetier-kubeconfig` into Lens, choose `edfreetier-grocery`, and verify the default/system namespaces. Zero nodes is expected at this hold point.
+- Operator manual checkpoint: import `${OPERATOR_KUBECONFIG}` into Lens, choose `${OPERATOR_KUBE_CONTEXT}`, and verify the default/system namespaces. Zero nodes is expected at this hold point.
 - [CI 37515700783](https://github.com/eshneken/family-grocery-list/actions/runs/37515700783) passed all three jobs for the implemented remote IAM/Lens/capacity-recovery setup.
 
 - Final failed-node-pool cleanup work request **SUCCEEDED**. Independent compartment inventory verified zero Compute instances and zero boot volumes in AD-1/AD-2/AD-3. The active Basic control plane, network, Vault secrets, reserved IP, and remote state are preserved for a later single-worker retry.

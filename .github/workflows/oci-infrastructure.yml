@@ -32,18 +32,16 @@ jobs:
     environment: always-free
     timeout-minutes: 120
     env:
-      TF_VAR_app_hostname: ${{ vars.OCI_APP_HOSTNAME }}
       TF_VAR_oke_kubernetes_version: ${{ vars.OCI_OKE_KUBERNETES_VERSION }}
-      TF_VAR_node_availability_domain: ${{ vars.OCI_NODE_AVAILABILITY_DOMAIN }}
-      TF_VAR_node_image_id: ${{ vars.OCI_NODE_IMAGE_ID }}
-      TF_VAR_caddy_acme_email: ${{ vars.CADDY_ACME_EMAIL }}
       TF_VAR_backup_image: ${{ vars.OCI_BACKUP_IMAGE }}
-      TF_VAR_backup_age_recipient: ${{ vars.OCI_BACKUP_AGE_RECIPIENT }}
       TF_VAR_backups_enabled: ${{ vars.OCI_BACKUPS_ENABLED || 'false' }}
       ALWAYS_FREE_NODEPOOL_RETRY_ONLY: ${{ inputs.retry_nodepool_only }}
       CONFIRM_APPLY_SHA: ${{ inputs.confirm_apply_sha }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - uses: ./.github/actions/load-oci-target
+        with:
+          configuration: ${{ secrets.OCI_TARGET_CONFIG }}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: 1.15.5
@@ -51,26 +49,28 @@ jobs:
       - uses: ./.github/actions/setup-oci-wif
         id: oci
         with:
-          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
-          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          domain-url: ${{ env.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ env.OCI_WIF_CLIENT_ID }}
           client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
-          audience: ${{ vars.OCI_WIF_AUDIENCE }}
-          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
-          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
-          region: ${{ vars.OCI_REGION }}
+          audience: ${{ env.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ env.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ env.OCI_TENANCY_OCID }}
+          region: ${{ env.OCI_REGION }}
       - name: Read target bootstrap outputs
         shell: bash
         run: |
           set -euo pipefail
-          test '${{ steps.oci.outputs.namespace }}' = iddiywf0v4j6
+          test '${{ steps.oci.outputs.namespace }}' = "$OCI_OBJECT_NAMESPACE"
           umask 077
-          oci os object get --namespace-name iddiywf0v4j6 --bucket-name grocery-always-free-tfstate --name bootstrap/terraform.tfstate --file "$RUNNER_TEMP/bootstrap-state.json" >/dev/null
+          oci os object get --namespace-name "$OCI_OBJECT_NAMESPACE" --bucket-name "$OCI_STATE_BUCKET" --name bootstrap/terraform.tfstate --file "$RUNNER_TEMP/bootstrap-state.json" >/dev/null
           python3 - <<'PY'
           import json, os
           state = json.load(open(os.environ['RUNNER_TEMP'] + '/bootstrap-state.json'))
           with open(os.environ['GITHUB_ENV'], 'a') as env:
               for name in ['vault_id', 'vault_key_id']:
-                  env.write('TF_VAR_' + name + '=' + state['outputs'][name]['value'] + '\n')
+                  value = state['outputs'][name]['value']
+                  print('::add-mask::' + value)
+                  env.write('TF_VAR_' + name + '=' + value + '\n')
           PY
       - name: Create foundation kubeconfig
         if: inputs.stage == 'cluster-foundation'
@@ -78,8 +78,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          oci os object get --namespace-name iddiywf0v4j6 --bucket-name grocery-always-free-tfstate --name production/terraform.tfstate --file "$RUNNER_TEMP/production-state.json" >/dev/null
+          oci os object get --namespace-name "$OCI_OBJECT_NAMESPACE" --bucket-name "$OCI_STATE_BUCKET" --name production/terraform.tfstate --file "$RUNNER_TEMP/production-state.json" >/dev/null
           cluster_id="$(jq -r '.outputs.cluster_id.value' "$RUNNER_TEMP/production-state.json")"
+          test "$cluster_id" = "$OCI_CLUSTER_OCID"
           oci ce cluster create-kubeconfig --cluster-id "$cluster_id" --file "$RUNNER_TEMP/kubeconfig" --region us-ashburn-1 --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT --with-auth-context --auth security_token --profile DEFAULT
           echo "TF_VAR_kubeconfig_path=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
       - name: Plan or apply reviewed stage

@@ -3,6 +3,10 @@ import datetime
 import importlib.util
 import pathlib
 import unittest
+import os
+import json
+from unittest.mock import patch
+from oci_target_fixture import TARGET
 
 spec = importlib.util.spec_from_file_location("monitor", pathlib.Path(__file__).with_name("check-backup-health.py"))
 monitor = importlib.util.module_from_spec(spec)
@@ -29,6 +33,11 @@ def job(start, failed=False, active=False, transition=None):
 
 
 class Health(unittest.TestCase):
+    def setUp(self):
+        env = patch.dict(os.environ, {"OCI_TARGET_CONFIG_JSON": json.dumps(TARGET)})
+        env.start()
+        self.addCleanup(env.stop)
+
     def test_fresh_complete_backup(self):
         self.assertTrue(monitor.evaluate(objects(), [], NOW)["healthy"])
 
@@ -87,9 +96,9 @@ class Health(unittest.TestCase):
 
     def test_target_cluster_is_exact(self):
         config = {"contexts": [{"name": "target", "context": {"user": "operator"}}],
-                  "users": [{"name": "operator", "user": {"exec": {"args": ["--cluster-id", monitor.CLUSTER_ID]}}}]}
+                  "users": [{"name": "operator", "user": {"exec": {"args": ["--cluster-id", TARGET["cluster_ocid"]]}}}]}
         monitor.verify_target(config, "target")
-        config["users"][0]["user"]["exec"]["args"] = ["--cluster-id", "other-cluster", monitor.CLUSTER_ID]
+        config["users"][0]["user"]["exec"]["args"] = ["--cluster-id", "other-cluster", TARGET["cluster_ocid"]]
         with self.assertRaises(ValueError):
             monitor.verify_target(config, "target")
 

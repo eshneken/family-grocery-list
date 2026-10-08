@@ -18,46 +18,36 @@ permissions:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/codex/oci-always-free'
+    if: github.ref == 'refs/heads/codex/oci-always-free' || github.ref == 'refs/heads/master'
     name: Exchange GitHub OIDC token for OCI credentials
     runs-on: ubuntu-latest
     environment: always-free
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
-      - name: Verify new tenancy configuration
-        env:
-          OCI_TENANCY_OCID: ${{ vars.OCI_TENANCY_OCID }}
-          OCI_COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
-          OCI_REGION: ${{ vars.OCI_REGION }}
-          OCI_WIF_DOMAIN_URL: ${{ vars.OCI_WIF_DOMAIN_URL }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$OCI_TENANCY_OCID" = 'ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua'
-          test "$OCI_COMPARTMENT_OCID" = 'ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa'
-          test "$OCI_REGION" = 'us-ashburn-1'
-          test "${OCI_WIF_DOMAIN_URL%/}" = 'https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443'
+      - uses: ./.github/actions/load-oci-target
+        with:
+          configuration: ${{ secrets.OCI_TARGET_CONFIG }}
       - uses: ./.github/actions/setup-oci-wif
         id: oci
         with:
-          domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
-          client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
+          domain-url: ${{ env.OCI_WIF_DOMAIN_URL }}
+          client-id: ${{ env.OCI_WIF_CLIENT_ID }}
           client-secret: ${{ secrets.OCI_WIF_CLIENT_SECRET }}
-          audience: ${{ vars.OCI_WIF_AUDIENCE }}
-          service-user-ocid: ${{ vars.OCI_WIF_SERVICE_USER_OCID }}
-          tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
-          region: ${{ vars.OCI_REGION }}
+          audience: ${{ env.OCI_WIF_AUDIENCE }}
+          service-user-ocid: ${{ env.OCI_WIF_SERVICE_USER_OCID }}
+          tenancy-ocid: ${{ env.OCI_TENANCY_OCID }}
+          region: ${{ env.OCI_REGION }}
       - name: Record verification
         env:
           OCI_NAMESPACE: ${{ steps.oci.outputs.namespace }}
         shell: bash
         run: |
           set -euo pipefail
-          test "$OCI_NAMESPACE" = 'iddiywf0v4j6'
+          test "$OCI_NAMESPACE" = "$OCI_OBJECT_NAMESPACE"
           {
             echo '### Always-free OCI federation verification passed'
-            echo 'Target: EDFREETIER / grocery / us-ashburn-1. Object Storage namespace: iddiywf0v4j6.'
+            echo 'Approved private target identity verified.'
             echo 'GitHub token exchange and namespace discovery passed. No infrastructure was provisioned.'
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Verify rehearsal backup health
@@ -66,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           oci ce cluster create-kubeconfig \
-            --cluster-id ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq \
+            --cluster-id "$OCI_CLUSTER_OCID" \
             --file "$RUNNER_TEMP/oke-kubeconfig" --region us-ashburn-1 \
             --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT \
             --with-auth-context --auth security_token --profile DEFAULT

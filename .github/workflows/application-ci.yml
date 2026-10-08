@@ -47,6 +47,8 @@ jobs:
           python3 -B scripts/test_bootstrap_always_free_wif.py
           python3 -B scripts/test_always_free_operations.py
           python3 -B scripts/test_backup_health.py
+          python3 -B scripts/test_oci_target.py
+          python3 -B scripts/test_public_config.py
       - name: Generate Prisma client
         run: npm run db:generate
       - name: Apply migrations to CI PostgreSQL

@@ -1,6 +1,6 @@
 # Production backup alerts
 
-The hourly Always Free backup-health workflow checks only the new grocery tenancy (iddiywf0v4j6) and its pinned OKE cluster. It uses a dedicated federation setup action for the Always Free monitor; legacy deployment authentication has been retired. No infrastructure is provisioned and no database/archive contents are read.
+The hourly Always Free backup-health workflow checks only the new grocery tenancy (${OCI_OBJECT_NAMESPACE}) and its pinned OKE cluster. It uses a dedicated federation setup action for the Always Free monitor; legacy deployment authentication has been retired. No infrastructure is provisioned and no database/archive contents are read.
 
 Set OCI_BACKUP_MONITOR_ENABLED=true in the always-free environment after production cutover and daily backup activation. The environment must permit master for this scheduled job. Old retirement is complete; the migration is merged into `master` and this monitor remains active alongside application delivery.
 

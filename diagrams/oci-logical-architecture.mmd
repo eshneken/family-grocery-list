@@ -2,8 +2,8 @@
 flowchart TD
   Browser[Household browsers] -->|DNS lookup| DNS[GoDaddy canonical A record]
   Browser -->|HTTPS 443| LB[Flexible LB / 10 Mbps min and max]
-  DNS -.->|129.159.189.16| LB
-  subgraph OCI[EDFREETIER / Ashburn]
+  DNS -.->|Reserved public IPv4| LB
+  subgraph OCI[Target tenancy / Ashburn]
     LB -->|TCP 80/443 backends| Caddy
     subgraph OKE[Basic OKE v1.36.4 / private worker and pods]
       Worker[One ARM64 A1 / 2 OCPU / 12 GB / IMDSv2]
@@ -21,5 +21,5 @@ flowchart TD
   end
   GHA[GitHub Actions / always-free federation] -->|Digest-pinned images and migration Jobs| App
   GHA -->|Guarded Terraform updates| State
-  Operator[Operator / EDFREETIER kubeconfig / Lens] -->|Authenticated port-forward| PG
+  Operator[Operator / kubeconfig / Lens] -->|Authenticated port-forward| PG
   Browser -->|Sign-in| Google[Google OAuth identity]

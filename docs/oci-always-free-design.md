@@ -14,7 +14,7 @@
 
 **Accepted storage decisions:** share one PVC between Caddy and PostgreSQL, leaving capacity for future pods; create one database backup daily and retain the last five successful daily backups.
 
-**Verified target:** OCI CLI profile `EDFREETIER`; tenancy `edfreetier`, OCID `ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua`; home/target region `us-ashburn-1`; existing ACTIVE compartment `grocery`, OCID `ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa`. Verified through read-only OCI APIs on October 5 after the profile update. Use this profile explicitly; do not substitute the default or another profile. See [target preflight results](oci-always-free-preflight.md) for quotas, image/version options, and remaining checks.
+**Verified target:** OCI CLI profile `${OCI_CLI_PROFILE}`; tenancy `${OCI_TENANCY_NAME}`, OCID `${OCI_TENANCY_OCID}`; home/target region `us-ashburn-1`; existing ACTIVE compartment `${OCI_COMPARTMENT_NAME}`, OCID `${OCI_COMPARTMENT_OCID}`. Verified through read-only OCI APIs on October 5 after the profile update. Use this profile explicitly; do not substitute the default or another profile. See [target preflight results](oci-always-free-preflight.md) for quotas, image/version options, and remaining checks.
 
 ## 1. Outcome and boundaries
 
@@ -195,7 +195,7 @@ Preserve DEFAULT Vault + SOFTWARE key. Generate new destination DB passwords and
 
 Google credentials and `NEXTAUTH_SECRET` are retrieved from the original secure source; GitHub cannot reveal stored secret values. If originals cannot be retrieved, issue a new Google client secret and new session secret deliberately, accounting for old-environment use and forced reauthentication. Do not rotate a shared client secret unexpectedly during parallel operation.
 
-Prefer a separate rehearsal Google web client in the existing Google project, with only the rehearsal callback. The operator manually adds `https://grocery-free.shnekendorf.com/api/auth/callback/google` to that client's authorized redirect URIs and provides its ID/secret securely to the new GitHub environment. Adding the rehearsal URI to the existing production client is also possible, but couples the environments. Google requires exact redirect URI matching. At final cutover use the existing production client and session secret; with the same `https://grocery.shnekendorf.com/api/auth/callback/google` URL, the OCI tenancy/IP change itself needs no Google OAuth update. A valid copied session must still be authorized by restored memberships. Test fresh sign-in even if existing cookies work. Allowlist/capabilities are database data, not bootstrap configuration. [Google redirect URI requirements](https://developers.google.com/identity/protocols/oauth2/web-server)
+Prefer a separate rehearsal Google web client in the existing Google project, with only the rehearsal callback. The operator manually adds `https://rehearsal.example.com/api/auth/callback/google` to that client's authorized redirect URIs and provides its ID/secret securely to the new GitHub environment. Adding the rehearsal URI to the existing production client is also possible, but couples the environments. Google requires exact redirect URI matching. At final cutover use the existing production client and session secret; with the same `https://grocery.example.com/api/auth/callback/google` URL, the OCI tenancy/IP change itself needs no Google OAuth update. A valid copied session must still be authorized by restored memberships. Test fresh sign-in even if existing cookies work. Allowlist/capabilities are database data, not bootstrap configuration. [Google redirect URI requirements](https://developers.google.com/identity/protocols/oauth2/web-server)
 
 ### 4.3 Backups and failure detection
 
@@ -238,7 +238,7 @@ RPO: up to 24 hours in normal operation; final migration RPO is zero relative to
 
 ### 5.0 New-tenancy prerequisites and manual identity setup
 
-Use the operator's existing dedicated compartment **`grocery`**, OCID **`ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa`**. No additional compartment creation is required. Read-only checks on October 5 confirmed OCI CLI profile **`EDFREETIER`** authenticates to tenancy `edfreetier`, the compartment is ACTIVE and is a direct child of that tenancy, and Ashburn is the READY home region. Recheck these target identities before bootstrap. The current roots accept an existing `compartment_ocid`; its lifecycle is outside application Terraform destroy.
+Use the operator's existing dedicated compartment **`${OCI_COMPARTMENT_NAME}`**, OCID **`${OCI_COMPARTMENT_OCID}`**. No additional compartment creation is required. Read-only checks on October 5 confirmed OCI CLI profile **`${OCI_CLI_PROFILE}`** authenticates to tenancy `${OCI_TENANCY_NAME}`, the compartment is ACTIVE and is a direct child of that tenancy, and Ashburn is the READY home region. Recheck these target identities before bootstrap. The current roots accept an existing `compartment_ocid`; its lifecycle is outside application Terraform destroy.
 
 Supply tenancy OCID, home/target region, account mode, compartment OCID, available A1 AD/capacity, operator public CIDR(s), SSH public key if retained, and target DNS/ACME email. Select the latest OKE version from service discovery rather than guessing it. Provide secrets through secure local/GitHub secret entry, not in chat. We capture these values in an environment inventory and check unused free allowances before apply.
 
@@ -253,7 +253,7 @@ Recreate the existing GitHub-to-OCI identity-domain trust in the new tenancy usi
 | OCI identity | Existing production WIF principal | New target-tenancy WIF principal |
 | State bucket/namespace | Existing tenancy | New bucket/namespace in new tenancy |
 | State keys | Existing keys | Same root key names are safe only in the distinct target bucket |
-| Public hostname | `grocery.shnekendorf.com` | Initially `grocery-free.shnekendorf.com`; later production name |
+| Public hostname | `grocery.example.com` | Initially `rehearsal.example.com`; later production name |
 | Image | Immutable old release digest | Branch release digest, ideally same application schema |
 | Workflow concurrency | Existing production groups | New groups scoped to `always-free` |
 
@@ -356,7 +356,7 @@ Use PostgreSQL 16 tools at a compatible minor version; preserve `_prisma_migrati
 2. Create/identify the new application compartment and target `always-free` GitHub environment; bootstrap new tenancy WIF trust/principal, worker backup dynamic group/tag, and scoped IAM. Record account mode/quota evidence and secure settings inventory.
 3. Discover and pin the latest production-supported regional OKE/ARM image combination. Bootstrap target state/Vault, then plan/apply target production roots. Verify the single A1, Basic cluster/version, IMDSv1 disabled, and free allocation counts.
 4. Apply cluster foundation: shared PVC bound/retained, directory permissions correct, PostgreSQL ready, secrets and CA installed, LB healthy, Caddy accessible. Verify operator Lens access and temporary runner API allowlisting/cleanup.
-5. Manually create `grocery-free.shnekendorf.com` A record to the target reserved IP and configure its OAuth callback. Check externally issued TLS and target identity via release/health evidence.
+5. Manually create `rehearsal.example.com` A record to the target reserved IP and configure its OAuth callback. Check externally issued TLS and target identity via release/health evidence.
 6. Verify cost/usage records, NAT/Service Gateway quotas and egress, object byte budget, instance-principal upload from the backup pod with IMDSv1 disabled, and no unexpected paid service.
 
 **Hold B:** no old data changes; target can deploy from branch and cannot access old state.
@@ -487,8 +487,8 @@ Recommended defaults for approval:
 3. Preserve private workers/VCN-native networking, zero-priced NAT, and Service Gateway. Check actual tenancy quotas; keep public database access closed.
 4. Keep verified internal DB TLS, separate runtime/migration roles, Vault/software keys, and five daily encrypted backups authenticated by worker instance principal. No OKE pod workload identity dependency.
 5. Retain a public OKE API with operator CIDR restrictions and temporary runner access. Use a separate human OCI identity for Lens and retain separate GitHub-to-OCI federation for CI.
-6. Use existing `grocery` compartment in the `EDFREETIER` tenancy and create the separate `always-free` GitHub environment; same workflow paths, branch-selected dispatch, distinct environment-scoped settings, and manual one-time OCI/Google identity setup. Verify the supplied profile/compartment before API operations.
-7. Test via `grocery-free.shnekendorf.com`, then freeze old writes and cut over the existing canonical hostname. Old environment remains maintenance-only during the parallel hold.
+6. Use existing `grocery` compartment in the `${OCI_CLI_PROFILE}` tenancy and create the separate `always-free` GitHub environment; same workflow paths, branch-selected dispatch, distinct environment-scoped settings, and manual one-time OCI/Google identity setup. Verify the supplied profile/compartment before API operations.
+7. Test via `rehearsal.example.com`, then freeze old writes and cut over the existing canonical hostname. Old environment remains maintenance-only during the parallel hold.
 8. Seven-day hold plus a successful canonical-hostname shopping run and recovery evidence before old destruction; merge only after old teardown.
 
 Once reviewed, the first step is a read-only target-tenancy/account/quota inventory and capture of the legacy baseline. Then create the branch and implement the new configuration. Each hold point above provides a concrete result to review before proceeding to data cutover or destruction.

@@ -32,11 +32,19 @@ resource "kubernetes_cron_job_v1" "postgres_backup" {
               image = var.backup_image
               env {
                 name  = "OCI_NAMESPACE"
-                value = "iddiywf0v4j6"
+                value = var.state_namespace
               }
               env {
                 name  = "BACKUP_BUCKET"
-                value = "grocery-always-free-backups"
+                value = var.backup_bucket_name
+              }
+              env {
+                name  = "EXPECTED_OCI_NAMESPACE"
+                value = var.state_namespace
+              }
+              env {
+                name  = "EXPECTED_BACKUP_BUCKET"
+                value = var.backup_bucket_name
               }
               env {
                 name  = "AGE_RECIPIENT"

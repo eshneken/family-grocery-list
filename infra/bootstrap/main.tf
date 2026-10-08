@@ -48,7 +48,7 @@ resource "oci_objectstorage_bucket" "terraform_state" {
 resource "oci_objectstorage_bucket" "backups" {
   compartment_id = var.compartment_ocid
   namespace      = local.namespace
-  name           = "grocery-always-free-backups"
+  name           = var.backup_bucket_name
   access_type    = "NoPublicAccess"
   storage_tier   = "Standard"
   versioning     = "Disabled"

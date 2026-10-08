@@ -1,0 +1,13 @@
+name: Load private OCI target
+description: Validate and mask the approved environment identity before authentication.
+inputs:
+  configuration:
+    required: true
+    description: Private OCI target configuration JSON from the environment secret.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        OCI_TARGET_CONFIG_JSON: ${{ inputs.configuration }}
+      run: python3 scripts/oci_target.py --github
