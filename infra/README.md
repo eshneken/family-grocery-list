@@ -1,6 +1,6 @@
 # OCI Always Free infrastructure
 
-This migration branch targets **EDFREETIER / grocery / us-ashburn-1** exclusively. The old environment remains on `master` during migration. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
+These roots target **EDFREETIER / grocery / us-ashburn-1** exclusively. Canonical production is live here; the old environment is frozen during the rollback hold. Master retains legacy deployment code until the retirement/merge checkpoint, with application delivery disabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
 
 Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [operator runbook](../docs/oci-always-free-operations.md). Provisioning and data cutover are separate checkpoints.
 
@@ -27,12 +27,12 @@ An apply requires a clean checkout, `CONFIRM_APPLY_SHA` equal to the full review
 
 The manual **OCI Always Free infrastructure** workflow runs one selected stage (`production` or `cluster-foundation`) with `plan` or `apply`. It reads bootstrap outputs from the new state bucket and authenticates only through `always-free`. The local administrator handles initial tenancy prerequisites and bootstrap; the deployer is not granted tenancy-wide IAM writes.
 
-The branch application workflow is manual; old `master` retains its original automatic deployment until merge. Do not merge until old-environment retirement has completed. Before merge, change the `always-free` environment branch restriction to permit `master`, set the production hostname/OAuth/session settings, and retain the same federation subject.
+The branch application workflow supports manual dispatch, but application delivery is currently disabled to prevent old master from reopening writers. The isolated hourly backup monitor is already merged and active on master. Do not merge until old-environment retirement has completed. `always-free` already permits `master` and the migration branch, and canonical hostname/OAuth/session values are installed. Before handoff, verify those settings and retain the same federation subject.
 
 ## Storage and recovery
 
 The worker boot disk plus shared data disk initially allocate approximately 100 GB, subject to actual OCI rounding. Caddy mounts only `caddy`; PostgreSQL mounts only `postgres`. Neither consumer recursively changes the shared root's ownership. The claim has `prevent_destroy`, and the StorageClass retains its PV; removal of Terraform configuration can bypass lifecycle protection, so always review plans and actual retained disks.
 
-Daily backups upload an age-encrypted custom dump and completion manifest, then retain the last five completed backups. A failed dump/upload never prunes completed backups. Upload-only instance IAM cannot read backup contents or Terraform state. Keep the age private recovery key outside OCI and GitHub. Backups start suspended and are enabled after an actual backup/restore and IAM-negative-access test.
+Daily backups upload an age-encrypted custom dump and completion manifest, then retain the last five completed backups. A failed dump/upload never prunes completed backups. Upload-only instance IAM cannot read backup contents or Terraform state. Keep the age private recovery key outside OCI and GitHub. Backups start suspended in a new installation; production now has `OCI_BACKUPS_ENABLED=true` after successful backup/restore and IAM-negative-access tests. Preserve that setting on updates.
 
-Full data recovery, certificate renewal, maintenance suspension and old-environment destruction are in the [design/runbook](../docs/oci-always-free-design.md). Ordinary rollout is not a disaster restore or teardown.
+Current health checks, database access, backup drills, recovery and release procedures are in the [operator runbook](../docs/oci-always-free-operations.md). The [architecture/tool reference](../docs/oci-deployment-plan.md) describes current selections; legacy destruction remains only in the archived migration design. Ordinary rollout is not a disaster restore or teardown.

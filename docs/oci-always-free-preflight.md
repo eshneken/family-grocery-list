@@ -1,5 +1,7 @@
 # OCI Always Free target preflight
 
+**Historical preflight:** these are October 5 observations, not current deployed usage or quota values. Provisioning and production cutover subsequently passed October 8. Use the [current architecture/tools](oci-deployment-plan.md) and [operator runbook](oci-always-free-operations.md); requery tenancy-wide limits/usage before adding another app.
+
 Checked October 5, 2026 using OCI CLI profile `EDFREETIER`. All API operations were read-only; no infrastructure, IAM, GitHub environment, or DNS was changed. These findings supplement the [proposed design and migration runbook](oci-always-free-design.md).
 
 The operator confirmed the Console plan is **Free Tier**, with no expiration displayed, and account creation on October 5. The operator expects the initial trial to end after approximately one month; an exact transition date is not established by the Console information provided. Repeat free-only entitlement checks after that transition. Subsequent branch/GitHub setup is recorded in [execution checkpoints](oci-always-free-checkpoints.md); it does not change the read-only nature of the preflight checks below.

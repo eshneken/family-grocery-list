@@ -1,8 +1,21 @@
 # OCI Always Free execution checkpoints
 
+**Latest checkpoint, October 8, 2026:** canonical production is live at `129.159.189.16`; a real production shopping run completed successfully. The single AD-3 ARM64 worker, Kubernetes PostgreSQL, shared storage, Caddy and 10/10 Mbps flexible LB are healthy. Daily backups are enabled; delivered GitHub failure notification and a healthy production monitor run were verified. The old app/schedules remain frozen, application delivery is disabled during the seven-day rollback hold, and retirement/merge remain pending. Entries below are dated implementation history, not current provisioning status. Use the [current runbook](oci-always-free-operations.md).
+
 Implementation began October 5, 2026. Checkpoint **1 — GitHub-to-OCI federation — passed**; temporary administrator OAuth application deactivation verified October 6. Checkpoint **2 — infrastructure implementation/review — passed**. Administrator IAM and state/bootstrap prerequisites were provisioned October 6; the Basic OKE control plane is now active, while worker provisioning awaits A1 capacity. Follow the [operator runbook](oci-always-free-operations.md) for new manual prerequisites and staged plan review.
 
-## Recorded baseline and completed preparation
+## Production acceptance and retirement preparation — October 8
+
+- Canonical DNS and HTTPS reach `129.159.189.16`; database-aware readiness and Google authorization/callback checks passed. The operator completed a new production shopping run successfully.
+- Daily backups at 09:00 UTC and shopping timeout every 15 minutes are enabled. First production backup-health run [37799818126](https://github.com/eshneken/family-grocery-list/actions/runs/37799818126) passed; the operator confirmed delivered failure notifications after the controlled test. The first naturally scheduled database backup is still pending.
+- A fresh backup after the production shopping run was checksum-verified, decrypted with the operator's off-cloud key, and restored to a scratch database. All 12 application/migration tables, the new shopping run, valid indexes and constraints were verified. Scratch DB and plaintext were removed; an encrypted archive remains outside OCI.
+- Actual target allocation: one A1 2/12 worker with IMDSv1 disabled, 50 GB boot plus 50 GB data volume, and one active flexible LB with min/max 10 Mbps. This records application allocation, not all tenancy-wide remaining capacity.
+- Read-only legacy destroy plans from pinned `813968f6f46a152ed355b9dfcf7492cf03130080` propose 8 foundation, 56 production and 3 bootstrap deletions, confined to the old identity/state. Old Terraform state exports are age-encrypted outside the old tenancy. No destroy has run. The legacy plan includes the obsolete OCI A record for the old IP; GoDaddy's canonical record is separate and must stay unchanged.
+- The seven-day interval ends **October 15, 2026 at 15:18:18 UTC (11:18:18 AM Eastern)**, measured from opening target writes. Ordinary retirement still requires the scheduled-backup checkpoint. Shortening these hold requirements needs an explicit operator decision before irreversible destruction.
+- Architecture/backup diagrams, tool selections and active runbooks now describe Kubernetes PostgreSQL and the current backup/identity/storage model. The logical data model was checked against Prisma and regenerated; its Excalidraw export is image-only.
+- Application delivery remains disabled until old retirement and the migration merge. The isolated master backup monitor remains active; both `master` and the migration branch are already permitted in `always-free`.
+
+## Historical baseline and completed preparation
 
 - Implementation branch: `codex/oci-always-free`.
 - Legacy configuration: local master commit `813968f6f46a152ed355b9dfcf7492cf03130080`; separate detached checkout at `/private/tmp/grocery-legacy-813968f`. The SHA is the durable reference; the temporary checkout can be recreated if removed. Never point it at the new backend.

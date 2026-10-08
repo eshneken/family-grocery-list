@@ -69,13 +69,13 @@ flowchart LR
     App --> DB[PostgreSQL pod / shared platform PVC]
 ```
 
-Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at GoDaddy. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The checked-in PNG, SVG, and Excalidraw exports are historical snapshots from before the external-DNS migration.
+Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at GoDaddy. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The [SVG](diagrams/oci-logical-architecture.svg), [PNG](diagrams/oci-logical-architecture.png), and [editable Excalidraw](diagrams/oci-logical-architecture.excalidraw) show the current deployment. The [backup/recovery diagram](diagrams/oci-backup-recovery.svg) and [architecture/tool-selection reference](docs/oci-deployment-plan.md) cover identities, storage and operations.
 
 ## Logical Data Model
 
 ![Family Grocery List logical entity-relationship diagram](diagrams/logical-data-model.png)
 
-The diagram follows the production Prisma model and shows entity cardinalities, ownership, optional catalog and store associations, shopping-list lifecycle, item outcomes, and learned corrections. The editable [Mermaid ER source](diagrams/logical-data-model.mmd) and rendered [SVG](diagrams/logical-data-model.svg) are included. Mermaid ER diagrams are not currently convertible to Excalidraw by the offline renderer.
+The diagram follows the production Prisma model and shows entity cardinalities, ownership, optional catalog and store associations, shopping-list lifecycle, item outcomes, and learned corrections. The editable [Mermaid ER source](diagrams/logical-data-model.mmd) and rendered [SVG](diagrams/logical-data-model.svg) are included. The [Excalidraw ER export](diagrams/logical-data-model.excalidraw) contains one image that can be moved/annotated; individual ER entities remain editable in Mermaid.
 
 ## Application Preview
 
@@ -122,13 +122,13 @@ gh pr create --base master --fill
 
 The unit job runs linting, type checks, migrations, and Vitest with enforced minimum coverage of 95% for statements, branches, functions, and lines. The browser job runs the mock-auth journeys and production Google-auth shell journey against disposable PostgreSQL. GitHub protects `master`, applies these requirements to administrators, blocks direct pushes and force pushes, and requires changes to arrive through a pull request. A second-person approval is not required because this is currently a single-owner repository.
 
-Every non-`master` branch push runs CI without production credentials. GitHub records those required results on the pull request. Because protected `master` accepts only up-to-date pull requests with both checks passing, the merge commit does not rerun the suites; it proceeds directly to the production build and deployment. Infrastructure changes require a separate manual **OCI infrastructure** deployment after merge, as described below.
+Every non-`master` branch push runs CI without production credentials. GitHub records those required results on the pull request. Because protected `master` accepts only up-to-date pull requests with both checks passing, the merge commit does not rerun the suites; it proceeds directly to the production build and deployment. Infrastructure changes require a separate reviewed manual **OCI Always Free infrastructure** plan/apply. During the migration hold application deployment is disabled; the automatic master behavior below applies after handoff.
 
 ## Production Infrastructure
 
 The migration branch targets OCI Always Free: Basic OKE, one 2-OCPU/12 GB ARM A1 worker, PostgreSQL in Kubernetes, a shared 50 GiB Caddy/database PVC, and one fixed 10/10 Mbps flexible load balancer. GoDaddy DNS remains manual.
 
-Follow the [execution checkpoints](docs/oci-always-free-checkpoints.md) and [operator runbook](docs/oci-always-free-operations.md). The old environment remains on `master` during migration; do not merge before its retirement. The new roots enforce the new tenancy/compartment, use separate state, and do not support automatic destructive resets.
+Follow the [execution checkpoints](docs/oci-always-free-checkpoints.md) and [operator runbook](docs/oci-always-free-operations.md). Production cutover and a real shopping run passed October 8, 2026. The old environment is frozen during the seven-day rollback hold; application deployment is disabled until retirement and default-branch handoff. Hourly backup alerts already run from `master`. Do not merge the main migration before old retirement. The new roots enforce the new tenancy/compartment, use separate state, and do not support automatic destructive resets.
 
 A local administrator prepares tenancy backup IAM and the state/Vault bootstrap. The manual **OCI Always Free infrastructure** workflow plans/applies the platform and cluster foundation separately after review. Full details are in [infra/README.md](infra/README.md).
 
@@ -141,16 +141,20 @@ Successful commits on feature branches stop after CI. Branch protection requires
 1. Builds and attests `linux/amd64` and `linux/arm64` images in GHCR.
 2. Selects the immutable image digest rather than a mutable tag.
 3. Runs checked-in Prisma migrations from an OKE Job against private PostgreSQL.
-4. On the first release only, creates the household and initial administrator through the idempotent bootstrap Job.
+4. In `restore-existing` mode, requires the reviewed restore marker and existing household data; skips initialization. `initialize` is reserved for an explicitly empty new database.
 5. Rolls out the application, waits for database-aware readiness, and tests the public HTTPS endpoint.
 
 Later releases retain production data, skip bootstrap, apply only pending migrations, and deploy the new image. Failed migrations stop before rollout. Failed readiness or smoke tests restore the previous application image; database migrations are never automatically reversed.
 
 See [deploy/README.md](deploy/README.md) for required GitHub secrets, the one-time GHCR visibility step, initialization behavior, and operating procedures.
 
+## Documentation
+
+Current references: [architecture and tool choices](docs/oci-deployment-plan.md), [operator runbook](docs/oci-always-free-operations.md), [infrastructure roots](infra/README.md), and [application delivery](deploy/README.md). Historical records: [migration design](docs/oci-always-free-design.md), [preflight](docs/oci-always-free-preflight.md), [execution checkpoints](docs/oci-always-free-checkpoints.md), and [Google authentication implementation](docs/google-oidc-auth-implementation-plan.md). Feature behavior: [shopping timeout](docs/shopping-session-timeout.md) and [Quick Add](docs/quick-add-autocomplete-design-plan.md).
+
 ## Administrative Tasks
 
-Production PostgreSQL has no public endpoint. To inspect or administer it with local pgAdmin, create a time-limited OCI Bastion port-forwarding session, retrieve the administrator password from OCI Vault, and require TLS for the database connection. Follow [Connect Local pgAdmin To Production PostgreSQL](infra/README.md#connect-local-pgadmin-to-production-postgresql) for the complete procedure and cleanup steps.
+Production PostgreSQL is a Kubernetes StatefulSet with a private ClusterIP service. Use the distinct operator kubeconfig and authenticated `kubectl port-forward`, with the database CA and hostname verification. Follow [Database administration](docs/oci-always-free-operations.md#database-administration); no managed PostgreSQL or database Bastion is provisioned. Keep owner credentials private.
 
 ## Prerequisites
 

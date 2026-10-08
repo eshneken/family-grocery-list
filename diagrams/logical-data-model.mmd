@@ -9,7 +9,7 @@ erDiagram
   USER {
     string id PK
     string email UK
-    string displayName
+    string displayName "optional"
     AuthProvider authProvider
   }
 
@@ -27,7 +27,7 @@ erDiagram
     string householdId FK
     string name
     boolean enabled
-    json categoryOrder
+    json categoryOrderJson "optional"
   }
 
   GROCERY_ITEM {
@@ -61,7 +61,7 @@ erDiagram
     string groceryItemId FK "optional"
     string storeId FK "optional"
     string requestedById FK
-    string displayName
+    string displayName "optional"
     string quantityText "optional"
     string category
     ListItemStatus status

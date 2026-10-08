@@ -1,6 +1,8 @@
 # OCI Always Free design and migration plan
 
-**Status:** Federation checkpoint 1 passed; checkpoint 2 implementation is underway. Infrastructure provisioning and migration have not started. Follow [execution checkpoints](oci-always-free-checkpoints.md).
+**Record status, October 8, 2026:** provisioning, rehearsal, production cutover and a canonical shopping run have passed. Daily backup jobs and GitHub backup alerts are enabled. Old retirement and default-branch handoff remain pending the rollback-hold checkpoint. This document preserves the original design/migration decisions; dated proposals below are historical. Use the [current architecture/tools](oci-deployment-plan.md) and [operator runbook](oci-always-free-operations.md) for live operations.
+
+**Original planning status (October 5):** federation had passed and implementation was underway; the later live status is recorded above and in [execution checkpoints](oci-always-free-checkpoints.md).
 
 **Prepared:** October 4, 2026; revised October 5 for shared storage, five daily backups, GitHub/Lens access, and latest supported Kubernetes.
 
@@ -22,7 +24,7 @@ This is a migration of hosting and database operations. Preserve application beh
 
 Both environments coexist, but they do not simultaneously accept authoritative family writes. Rehearsal data is disposable. After final cutover, the new database is authoritative; the old app remains in maintenance. There is no bidirectional database replication.
 
-Execution was authorized after review. The migration branch and its isolated GitHub environment have been created. No OCI application infrastructure, database, or DNS changes have been made. Manual identity setup is checkpoint 1; provisioning follows successful federation verification and the reviewed infrastructure implementation.
+Execution was authorized after review. The migration branch and its isolated GitHub environment have been created. At that initial authorization checkpoint, no OCI application infrastructure, database, or DNS changes had yet been made. Manual identity setup is checkpoint 1; provisioning follows successful federation verification and the reviewed infrastructure implementation.
 
 ## 2. Eligibility and zero-cost acceptance gate
 
