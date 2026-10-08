@@ -1,4 +1,4 @@
-> Canonical production is live in the Always Free tenancy through `always-free`. The old grocery environment and its deployment access have been retired. Application delivery is temporarily disabled pending the migration merge. Re-enable it after that merge; use `restore-existing` against the running database. See the [operator runbook](../docs/oci-always-free-operations.md).
+> Canonical production is live in the Always Free tenancy through `always-free`. The old grocery environment and its deployment access have been retired. The migration is merged and application delivery is enabled on `master`; use `restore-existing` against the running database. See the [operator runbook](../docs/oci-always-free-operations.md).
 
 # Application Deployment
 

@@ -1,6 +1,6 @@
 # Always Free operator runbook
 
-**Current state, October 8, 2026:** canonical production is live at https://grocery.shnekendorf.com, reserved IP `129.159.189.16`. The operator completed a production shopping run. PostgreSQL runs inside Kubernetes; there is no managed PostgreSQL service in the target tenancy. Both daily backups and shopping-timeout jobs are enabled. The old grocery environment and its dedicated deployment access were retired October 8 after explicit waiver of the hold and first scheduled-backup gate. Its Vault/key are pending OCI deletion until November 7. Application delivery is temporarily disabled until retirement and default-branch handoff; hourly backup alerts are active from `master`.
+**Current state, October 8, 2026:** canonical production is live at https://grocery.shnekendorf.com, reserved IP `129.159.189.16`. The operator completed a production shopping run. PostgreSQL runs inside Kubernetes; there is no managed PostgreSQL service in the target tenancy. Both daily backups and shopping-timeout jobs are enabled. The old grocery environment and its dedicated deployment access were retired October 8 after explicit waiver of the hold and first scheduled-backup gate. Its Vault/key are pending OCI deletion until November 7. The migration is merged into `master` and application delivery is enabled in `restore-existing` mode; hourly backup alerts are active from `master`.
 
 See [architecture and tool choices](oci-deployment-plan.md), [execution record](oci-always-free-checkpoints.md), and [historical migration design](oci-always-free-design.md).
 
@@ -138,4 +138,4 @@ The old cluster, managed database, worker, grocery network/LB and state bucket a
 
 The old database is no longer a rollback destination. Recovery uses a validated encrypted backup into an explicitly empty replacement database; preserve the current production volume and off-cloud recovery key. The [archived migration design](oci-always-free-design.md) preserves the original hold and approved teardown sequence.
 
-Default-branch handoff is the remaining checkpoint: refresh the migration PR against `master`, pass required CI, merge, enable `application.yml`, then verify its first `restore-existing` deployment preserves existing data, marker and schedules. `always-free` already permits both `master` and the migration branch.
+The [migration PR #27](https://github.com/eshneken/family-grocery-list/pull/27) is merged after all three CI checks passed. Application delivery is enabled on `master` and defaults to `restore-existing`. Verify data, the restore marker and maintenance schedules after each deployment using the checks above. `always-free` already permits both `master` and the migration branch.

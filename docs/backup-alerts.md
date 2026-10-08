@@ -2,7 +2,7 @@
 
 The hourly Always Free backup-health workflow checks only the new grocery tenancy (iddiywf0v4j6) and its pinned OKE cluster. It uses a dedicated federation setup action for the Always Free monitor; legacy deployment authentication has been retired. No infrastructure is provisioned and no database/archive contents are read.
 
-Set OCI_BACKUP_MONITOR_ENABLED=true in the always-free environment after production cutover and daily backup activation. The environment must permit master for this scheduled job. Old retirement is complete; retain this monitor during default-branch delivery handoff.
+Set OCI_BACKUP_MONITOR_ENABLED=true in the always-free environment after production cutover and daily backup activation. The environment must permit master for this scheduled job. Old retirement is complete; the migration is merged into `master` and this monitor remains active alongside application delivery.
 
 Checks fail on stale (>30 hours), missing, incomplete or empty backups, excessive completed retention (>5), newer failed Jobs, stuck Jobs (>40 minutes), a suspended daily CronJob, or an access failure. A later complete backup clears an older failure. Restore drills remain required. Application uptime, node health, disk use and TLS are outside this checker’s scope.
 

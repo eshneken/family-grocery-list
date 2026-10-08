@@ -1,6 +1,6 @@
 # OCI Always Free infrastructure
 
-These roots target **EDFREETIER / grocery / us-ashburn-1** exclusively. Canonical production is live here; the old grocery environment has been retired after explicit waiver of the rollback hold. Master retains legacy deployment code until the merge checkpoint, with application delivery disabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
+These roots target **EDFREETIER / grocery / us-ashburn-1** exclusively. Canonical production is live here; the old grocery environment has been retired after explicit waiver of the rollback hold. Master now contains the Always Free deployment implementation; application delivery is enabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
 
 Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [operator runbook](../docs/oci-always-free-operations.md). Provisioning and data cutover are separate checkpoints.
 
@@ -9,7 +9,7 @@ Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [
 | `tenancy-identity` | Local administrator: defined backup tag, worker dynamic group, bucket-scoped IAM | Initially local; after bootstrap, private remote `tenancy-identity/terraform.tfstate` (local administrator operations only) |
 | `bootstrap` | Private versioned state bucket, private backup bucket, DEFAULT Vault and SOFTWARE key | New bucket: `bootstrap/terraform.tfstate` after local bootstrap migration |
 | `production` | Basic OKE, one A1 2 OCPU/12 GB worker, 50 GB boot disk, private networking/NAT/Service Gateway, public API, reserved LB IP, optional troubleshooting Bastion, DB secrets/TLS | New bucket: `production/terraform.tfstate` |
-| `cluster-foundation` | PostgreSQL 16, Caddy, one retained shared 50 GiB PVC, one fixed 10/10 Mbps TCP LB, daily backup CronJob | New bucket: `cluster-foundation/terraform.tfstate` |
+| `cluster-foundation` | PostgreSQL 16, Caddy, one retained shared 50 GiB PVC, one flexible TCP LB fixed at 10/10 Mbps, daily backup CronJob | New bucket: `cluster-foundation/terraform.tfstate` |
 
 The API permits IPv4 sources during the build, as explicitly requested October 6 while the operator is traveling. OCI IAM authentication, Kubernetes RBAC and verified TLS remain required. PostgreSQL, worker/kubelet and NodePorts are private. API allowlisting is a separate follow-up, configured with `operator_api_cidrs`.
 
@@ -27,7 +27,7 @@ An apply requires a clean checkout, `CONFIRM_APPLY_SHA` equal to the full review
 
 The manual **OCI Always Free infrastructure** workflow runs one selected stage (`production` or `cluster-foundation`) with `plan` or `apply`. It reads bootstrap outputs from the new state bucket and authenticates only through `always-free`. The local administrator handles initial tenancy prerequisites and bootstrap; the deployer is not granted tenancy-wide IAM writes.
 
-The branch application workflow supports manual dispatch, but application delivery is currently disabled to prevent old master from reopening writers. The isolated hourly backup monitor is already merged and active on master. Old-environment retirement is complete; its Vault/key deletion waiting period ends November 7. Merge only after required CI passes. `always-free` already permits `master` and the migration branch, and canonical hostname/OAuth/session values are installed. Before handoff, verify those settings and retain the same federation subject.
+Application delivery is enabled on `master`, supports manual dispatch and defaults to `restore-existing`. The hourly backup monitor is active on master. Old-environment retirement is complete; its Vault/key deletion waiting period ends November 7. `always-free` already permits `master` and the migration branch, and canonical hostname/OAuth/session values are installed. Retain those settings and the same federation subject on updates.
 
 ## Storage and recovery
 
