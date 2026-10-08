@@ -51,6 +51,7 @@ COPY --from=production-dependencies --chown=nextjs:nodejs /app/node_modules ./no
 COPY --from=production-dependencies --chown=nextjs:nodejs /app/package.json /app/package-lock.json ./
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/src ./src
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/check-deployment-database.mjs ./scripts/check-deployment-database.mjs
 COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./tsconfig.json
 
 USER 1001:1001

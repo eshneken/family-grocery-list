@@ -1,45 +1,13 @@
-# Cluster Foundation
+# Always Free cluster foundation
 
-This root configures long-lived Kubernetes infrastructure after the OCI `production` root has created OKE and PostgreSQL. It does not deploy the application image or run migrations.
+Uses only the new production state and a short-lived target kubeconfig. Creates PostgreSQL 16 with verified TLS, runtime/migration/backup Secrets, PostgreSQL CA ConfigMap, Caddy, one retained 50 GiB `platform-data` claim, one 10/10 Mbps TCP flexible LB and the daily backup CronJob.
 
-Documentation: [infrastructure overview](../README.md) | [production OCI environment](../production/README.md) | [project README](../../README.md)
+Both PostgreSQL and Caddy use the same ReadWriteOnce claim, with separate `postgres` and `caddy` subdirectories. Init containers create/own only their own directory; no shared pod-level fsGroup recursively changes the disk. Never replace the shared PVC to roll out an application.
 
-It creates the `grocery` namespace, a PostgreSQL CA ConfigMap and database Secret, Caddy with persistent ACME state, and the public `LoadBalancer` Service bound to the pre-reserved OCI public IP.
+The official PostgreSQL Bookworm and Caddy image indexes are pinned by digest and include ARM64. The live destination uses `UTF8` / `C.UTF-8`; the old source used `en_US.UTF-8`. The operator accepted the destination locale and rehearsal validated sorting/case behavior. A future restore must still verify encoding, locale/collation and extensions before proceeding; reindex restored indexes as required by the restore path. Do not infer compatibility from the major version alone.
 
-## Local setup
+The backup image is built by **Application Always Free deployment**, operation `build-backup-only` and pinned with `OCI_BACKUP_IMAGE`. Set an external age public recipient with `OCI_BACKUP_AGE_RECIPIENT`. Keep its private key outside OCI/GitHub. `backups_enabled=false` is the initial default; production is now enabled with `OCI_BACKUPS_ENABLED=true` after successful encrypted backup/restore and instance-principal permission checks. Supply `backups_enabled=true` for local updates and verify the schedule remains enabled.
 
-First create a short-lived kubeconfig with the OCI CLI after the OKE cluster is active:
+Use authenticated `kubectl port-forward service/postgres 5432:5432` for administration. The certificate name is `postgres.grocery.svc.cluster.local`; with local libpq set `PGHOST` to that name and `PGHOSTADDR=127.0.0.1`, plus the exported CA and your separately retrieved administrator/owner password. Never expose port 5432 publicly.
 
-```sh
-oci ce cluster create-kubeconfig \
-  --cluster-id "$(cd ../production && terraform output -raw cluster_id)" \
-  --file "$HOME/.kube/family-grocery" \
-  --region "<oci-region>" \
-  --token-version 2.0.0 \
-  --kube-endpoint PUBLIC_ENDPOINT
-```
-
-Copy `terraform.tfvars.example`, fill in the state bucket/namespace, compartment OCID, and ACME email, then initialize this root with a separate state key:
-
-```sh
-cd infra/cluster-foundation
-terraform init \
-  -backend-config="bucket=<bootstrap state_bucket_name>" \
-  -backend-config="namespace=<bootstrap state_namespace>" \
-  -backend-config="key=cluster-foundation/terraform.tfstate" \
-  -backend-config="region=<oci-region>"
-terraform plan
-terraform apply
-```
-
-The production state is read-only input to this root. The OCI identity running it needs permission to read the PostgreSQL connection detail and Vault secret bundle, as well as permission to manage OKE resources in the application compartment. OKE authorizes that OCI identity through IAM; this root intentionally does not try to bootstrap Kubernetes Roles, because a new non-tenancy-administrator cannot create its own Role grant. The OCI CLI must also be installed and authenticated as that identity: Terraform renames the CCM-created public load balancer in place after the Service obtains its reserved public IP.
-
-## Safety notes
-
-- Caddy uses one replica and a 50 GiB `ReadWriteOnce` OCI Block Volume. Its Deployment uses `Recreate` so two pods cannot contend for the volume. The `oci-bv` StorageClass binds only after Caddy is scheduled, so Terraform intentionally does not wait for the PVC before creating that Deployment.
-- The Caddy PVC and its OCI Block Volume are intentionally destroyable so this non-production environment can be reset and recreated end to end. A reset discards Caddy's ACME account and certificate cache.
-- The public service must be applied only after the application Service named `grocery-app` exists; Caddy will otherwise return upstream errors, though it can still obtain and retain certificates.
-- The service annotations are intentionally centralized in `load-balancer-service.tf`. Confirm them against the installed OCI cloud-controller-manager version during the first live apply.
-- `load_balancer_display_name` defaults to `lb-grocery`. The post-provision reconciler updates only the display name; listeners, backends, and security configuration remain owned by OKE's cloud-controller-manager. On `terraform destroy`, it removes any CCM LB still attached to the reserved IP before deleting the Kubernetes Service, so the foundation root resets cleanly.
-
-Next: follow the [application deployment guide](../../deploy/README.md).
+See the [operator runbook](../../docs/oci-always-free-operations.md) and [full migration design](../../docs/oci-always-free-design.md).

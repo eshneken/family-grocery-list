@@ -1,7 +1,16 @@
-name: Verify OCI workload identity
+name: Verify always-free OCI federation
 
 on:
   workflow_dispatch:
+    inputs:
+      check_backup_health:
+        description: Read-only rehearsal backup check (permits suspended schedule)
+        type: boolean
+        default: false
+
+concurrency:
+  group: always-free-maintenance
+  cancel-in-progress: false
 
 permissions:
   contents: read
@@ -9,13 +18,28 @@ permissions:
 
 jobs:
   verify:
+    if: github.ref == 'refs/heads/codex/oci-always-free'
     name: Exchange GitHub OIDC token for OCI credentials
     runs-on: ubuntu-latest
-    environment: production
+    environment: always-free
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+      - name: Verify new tenancy configuration
+        env:
+          OCI_TENANCY_OCID: ${{ vars.OCI_TENANCY_OCID }}
+          OCI_COMPARTMENT_OCID: ${{ vars.OCI_COMPARTMENT_OCID }}
+          OCI_REGION: ${{ vars.OCI_REGION }}
+          OCI_WIF_DOMAIN_URL: ${{ vars.OCI_WIF_DOMAIN_URL }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$OCI_TENANCY_OCID" = 'ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua'
+          test "$OCI_COMPARTMENT_OCID" = 'ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa'
+          test "$OCI_REGION" = 'us-ashburn-1'
+          test "${OCI_WIF_DOMAIN_URL%/}" = 'https://idcs-a17d6a11db0544fa99f7562f8c569990.identity.oraclecloud.com:443'
       - uses: ./.github/actions/setup-oci-wif
+        id: oci
         with:
           domain-url: ${{ vars.OCI_WIF_DOMAIN_URL }}
           client-id: ${{ vars.OCI_WIF_CLIENT_ID }}
@@ -25,9 +49,28 @@ jobs:
           tenancy-ocid: ${{ vars.OCI_TENANCY_OCID }}
           region: ${{ vars.OCI_REGION }}
       - name: Record verification
+        env:
+          OCI_NAMESPACE: ${{ steps.oci.outputs.namespace }}
         shell: bash
         run: |
+          set -euo pipefail
+          test "$OCI_NAMESPACE" = 'iddiywf0v4j6'
           {
-            echo '### OCI WIF verification passed'
-            echo 'GitHub exchanged its OIDC token for an OCI security token and completed a read-only Object Storage namespace request.'
+            echo '### Always-free OCI federation verification passed'
+            echo 'Target: EDFREETIER / grocery / us-ashburn-1. Object Storage namespace: iddiywf0v4j6.'
+            echo 'GitHub token exchange and namespace discovery passed. No infrastructure was provisioned.'
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Verify rehearsal backup health
+        if: inputs.check_backup_health
+        shell: bash
+        run: |
+          set -euo pipefail
+          oci ce cluster create-kubeconfig \
+            --cluster-id ocid1.cluster.oc1.iad.aaaaaaaaaoqtmkxk4i6pgk33uwpsd2h7jqwrxgisp5izvndkdc6gjbeaaqbq \
+            --file "$RUNNER_TEMP/oke-kubeconfig" --region us-ashburn-1 \
+            --token-version 2.0.0 --kube-endpoint PUBLIC_ENDPOINT \
+            --with-auth-context --auth security_token --profile DEFAULT
+          context="$(kubectl --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" config current-context)"
+          python3 -B scripts/check-backup-health.py \
+            --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" --context "$context" \
+            --oci-profile DEFAULT --oci-auth security_token --allow-suspended

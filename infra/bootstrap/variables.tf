@@ -1,16 +1,28 @@
 variable "tenancy_ocid" {
+  validation {
+    condition     = var.tenancy_ocid == "ocid1.tenancy.oc1..aaaaaaaaxr2zj2tokqai2vyetuiinhzdr2i6yupriqasl5im3jwv7yjfa2ua"
+    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+  }
   description = "OCID of the OCI tenancy that owns the Object Storage namespace."
   type        = string
   sensitive   = true
 }
 
 variable "compartment_ocid" {
+  validation {
+    condition     = var.compartment_ocid == "ocid1.compartment.oc1..aaaaaaaayhvqxmlrywosn7ef2jtruuvatnovwluou2bhwzbtstg5sq2gtppa"
+    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+  }
   description = "OCID of the application compartment that owns the state resources."
   type        = string
   sensitive   = true
 }
 
 variable "region" {
+  validation {
+    condition     = var.region == "us-ashburn-1"
+    error_message = "This migration root is bound to EDFREETIER / grocery / Ashburn; do not reuse legacy state."
+  }
   description = "OCI region for the state resources."
   type        = string
 }
@@ -44,6 +56,15 @@ variable "tags" {
   default = {
     Application = "family-grocery-list"
     ManagedBy   = "terraform"
-    Environment = "production"
+    Environment = "always-free"
+  }
+}
+
+variable "oci_config_profile" {
+  type    = string
+  default = "EDFREETIER"
+  validation {
+    condition     = contains(["EDFREETIER", "DEFAULT"], var.oci_config_profile)
+    error_message = "Use EDFREETIER locally or DEFAULT for short-lived GitHub federation."
   }
 }

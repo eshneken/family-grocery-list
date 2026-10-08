@@ -1,3 +1,5 @@
+> Canonical production is live in the Always Free tenancy through `always-free`. The old grocery environment and its deployment access have been retired. Application delivery is temporarily disabled pending the migration merge. Re-enable it after that merge; use `restore-existing` against the running database. See the [operator runbook](../docs/oci-always-free-operations.md).
+
 # Application Deployment
 
 Application delivery is split between `.github/workflows/application-ci.yml` and `.github/workflows/application.yml`. Terraform owns OCI and the durable cluster foundation. The CI workflow validates feature branches, while the production workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
@@ -8,7 +10,7 @@ Documentation: [project README](../README.md) | [OCI infrastructure guide](../in
 
 ## Branch And Test Flow
 
-Every push to a non-`master` branch runs two independent jobs:
+Every push to a non-`master` branch runs application checks plus the PostgreSQL/backup platform integration check:
 
 - **Unit tests and coverage** starts PostgreSQL 16, applies migrations, runs linting and type checks, and enforces the repository's coverage floors.
 - **Browser E2E tests** starts a separate PostgreSQL 16 service, applies migrations, and runs the mock-auth desktop/mobile journeys plus the production Google-auth shell test.
@@ -19,7 +21,7 @@ Protected `master` requires **Unit tests and coverage** and **Browser E2E tests*
 
 ## Production Environment Settings
 
-The existing GitHub `production` environment supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#one-time-wif-bootstrap). Add these application secrets:
+The migration branch uses the separate GitHub `always-free` environment, which supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#federation). Add these application secrets:
 
 | Secret | Purpose |
 | --- | --- |
@@ -70,21 +72,23 @@ The local and production clients represent the same application, so they can and
    ```
 
    Google compares the scheme, hostname, port, path, case, and trailing slash exactly. Production redirect URIs must use HTTPS. Do not add `localhost`, an IP address, a wildcard, or a preview hostname to this client.
-9. Create the client and immediately store its client ID and newly issued client secret in the GitHub `production` environment:
+9. Create the client and immediately store its client ID and newly issued client secret in the GitHub `always-free` environment:
 
-   - Repository **Settings** > **Environments** > **production** > **Environment secrets**
+   - Repository **Settings** > **Environments** > **always-free** > **Environment secrets**
    - Replace `GOOGLE_CLIENT_ID` with the production web client ID.
    - Replace `GOOGLE_CLIENT_SECRET` with the matching production client secret.
 
    With GitHub CLI, run the following from the repository and enter each value only when prompted:
 
    ```bash
-   gh secret set GOOGLE_CLIENT_ID --env production
-   gh secret set GOOGLE_CLIENT_SECRET --env production
+   gh secret set GOOGLE_CLIENT_ID --env always-free
+   gh secret set GOOGLE_CLIENT_SECRET --env always-free
    ```
 
    Never commit the client secret or place it in a GitHub variable. GitHub does not expose an existing secret value, so updating these names safely replaces the prior local-client credentials.
 10. Confirm `INITIAL_ADMIN_EMAIL` in the same GitHub environment is the exact Gmail address that will sign in. The application's database allowlist remains the authorization boundary even though Google's basic sign-in scopes do not require the account to be listed as an OAuth test user.
+
+Public DNS is hosted externally at GoDaddy. After infrastructure creates or changes the reserved load balancer IP, [manually update the hostname’s A record](../infra/production/README.md#external-dns-setup-godaddy) using the production `reserved_public_ip` output. Caddy manages certificate issuance and renewal without DNS-provider credentials.
 
 Before starting or rerunning a production deployment, verify DNS and TLS reach Caddy rather than a localhost service:
 
@@ -110,6 +114,10 @@ OKE pulls the image anonymously so the cluster does not retain a long-lived GitH
 
 Do not replace this with a short-lived workflow token stored as an OKE image-pull Secret; pods must remain pullable after the workflow token expires or a node restarts.
 
+## Empty installation versus restored production
+
+The current production database was restored and its marker was created only after validated transfer. Routine deployment defaults to `restore-existing`, requires existing household data and the marker, and never seeds that database. The steps below describe an explicitly empty installation selected with `deployment_mode=initialize`; they are not migration instructions.
+
 ## Initial Deployment
 
 The first successful deployment runs in this order:
@@ -127,11 +135,11 @@ The production bootstrap is non-destructive. It creates the household, initial G
 Inspect the marker with:
 
 ```bash
-kubectl --kubeconfig "$HOME/.kube/family-grocery" \
+kubectl --kubeconfig .always-free/edfreetier-kubeconfig --context edfreetier-grocery \
   --namespace grocery get configmap grocery-bootstrap-state --output=yaml
 ```
 
-Do not create the marker manually. If PostgreSQL is deliberately replaced while the Kubernetes namespace survives, delete the stale marker only after confirming the new database is empty so the next deployment can initialize it.
+For an empty installation, let the successful bootstrap Job create the marker. For a reviewed logical restore, an operator creates it only after validating restored data, recording backup ID/time and completion; a dump does not contain Kubernetes ConfigMaps. If PostgreSQL is deliberately replaced while the Kubernetes namespace survives, delete the stale marker only after confirming the new database is empty so the next deployment can initialize it.
 
 ## Routine Deployment
 
@@ -140,11 +148,11 @@ The application resources also include the [shopping-session timeout CronJob](..
 For every later `master` commit, the workflow:
 
 1. Publishes and attests the immutable image.
-2. Suspends shopping cleanup and applies pending Prisma migrations through the in-cluster migration Job.
+2. Suspends shopping cleanup and daily backups, waits for active maintenance Jobs, then applies pending Prisma migrations through the in-cluster migration Job.
 3. Detects `grocery-bootstrap-state` and skips all initialization.
 4. Applies the Deployment with the new digest.
 5. Waits for readiness and performs an HTTPS smoke test.
-6. Enables the shopping cleanup CronJob only after both checks pass. Any deployment failure leaves cleanup suspended.
+6. Enables shopping cleanup and restores the backup schedule's prior enabled state only after both checks pass. Any deployment failure leaves maintenance paused for inspection. Internal-only readiness intentionally leaves both paused.
 
 Migrations must follow expand/contract compatibility. A failed application rollout restores the previous image, but a successful database migration is not rolled back automatically. Destructive schema removal belongs in a later release after old application versions can no longer reference it.
 

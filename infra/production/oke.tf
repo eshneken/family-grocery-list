@@ -8,7 +8,7 @@ resource "oci_containerengine_cluster" "grocery" {
   compartment_id     = var.compartment_ocid
   name               = "family-grocery-oke"
   kubernetes_version = var.oke_kubernetes_version
-  type               = "ENHANCED_CLUSTER"
+  type               = "BASIC_CLUSTER"
   vcn_id             = oci_core_vcn.grocery.id
   freeform_tags      = local.common_tags
 
@@ -44,19 +44,29 @@ resource "oci_containerengine_node_pool" "grocery" {
   ssh_public_key     = var.node_ssh_public_key
   freeform_tags      = local.common_tags
 
+  node_metadata = { areLegacyImdsEndpointsDisabled = "true" }
+
+  lifecycle {
+    precondition {
+      condition     = contains([for source in data.oci_containerengine_node_pool_option.a1.sources : source.image_id], var.node_image_id)
+      error_message = "Pinned image is not offered for the selected OKE ARM64 version."
+    }
+  }
+
   node_shape_config {
     ocpus         = var.node_ocpus
     memory_in_gbs = var.node_memory_gb
   }
 
   node_source_details {
-    image_id                = data.oci_containerengine_node_pool_option.a1.sources[0].image_id
+    image_id                = var.node_image_id
     source_type             = "IMAGE"
     boot_volume_size_in_gbs = var.node_boot_volume_gb
   }
   node_config_details {
-    size    = var.node_count
-    nsg_ids = [oci_core_network_security_group.workers.id]
+    defined_tags = { "grocery-backup.eligible" = "true" }
+    size         = var.node_count
+    nsg_ids      = [oci_core_network_security_group.workers.id]
 
     node_pool_pod_network_option_details {
       cni_type       = "OCI_VCN_IP_NATIVE"

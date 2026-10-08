@@ -1,0 +1,14 @@
+%%{init: {"theme": "neutral", "flowchart": {"htmlLabels": false, "curve": "linear"}}}%%
+flowchart TD
+  PG[Private PostgreSQL 16 / live database] -->|TLS / grocery_backup read-only role| Job[Backup CronJob / 09:00 UTC]
+  Job -->|pg_dump custom archive| Age[age encryption / public recipient only]
+  Age -->|Instance principal / IMDSv2| Bucket[Private OCI backup bucket]
+  Bucket --- Pairs[Last five complete archive and manifest pairs]
+  GHA[GitHub hourly backup health / minute 17] -->|Object metadata only| Bucket
+  GHA -->|Job results and schedule status| Job
+  GHA -->|Failed workflow notification| Email[Operator GitHub Actions email]
+  Bucket -->|Authorized operator download| Check[Verify archive SHA-256 and size]
+  Key[Private age key / outside OCI and GitHub] -->|Operator decryption only| Restore[PostgreSQL 16 scratch restore]
+  Check --> Restore
+  Restore -->|Tables / constraints / indexes / shopping history| Validate[Recovery validation]
+  Validate -->|Retain encrypted copy / remove scratch and plaintext| Offline[Off-tenancy encrypted recovery archive]

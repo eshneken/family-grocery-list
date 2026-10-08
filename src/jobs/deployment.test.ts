@@ -11,7 +11,15 @@ const tool = require("node:path").basename(process.argv[1]);
 fs.appendFileSync(process.env.MOCK_LOG, tool + " " + args + "\\n");
 const failure = process.env.MOCK_FAILURE;
 if (tool === "curl") process.exit(failure === "readiness" ? 1 : 0);
-if (args.includes("get cronjob")) {
+if (args.includes("get configmap grocery-bootstrap-state") && failure === "missing-marker") {
+  process.exit(1);
+} else if (args.includes("get jobs")) {
+  const active = failure === "active-job" && !fs.existsSync(process.env.MOCK_ACTIVE_SEEN);
+  fs.writeFileSync(process.env.MOCK_ACTIVE_SEEN, "yes");
+  console.log(JSON.stringify({ items: active ? [{ metadata: { labels: { task: "postgres-backup" } }, status: { active: 1 } }] : [] }));
+} else if (args.includes("get cronjob grocery-postgres-backup")) {
+  console.log("true");
+} else if (args.includes("get cronjob")) {
   if (process.env.MOCK_EXISTING === "yes" || fs.existsSync(process.env.MOCK_CREATED)) console.log("cronjob.batch/grocery-shopping-timeout");
 } else if (args.includes("get deployment")) {
   console.log("ghcr.io/example/app@sha256:" + "b".repeat(64));
@@ -30,10 +38,10 @@ if (args.includes("get cronjob")) {
 }
 `;
 
-function deploy(existing: boolean, failure = "") {
+function deploy(existing: boolean, failure = "", readiness = "public") {
   const dir = mkdtempSync(join(tmpdir(), "grocery-deployment-test-"));
   try {
-    for (const name of ["kubectl", "curl"]) {
+    for (const name of ["kubectl", "curl", "sleep"]) {
       writeFileSync(join(dir, name), fakeCommand, { mode: 0o700 });
     }
     const log = join(dir, "commands");
@@ -45,6 +53,9 @@ function deploy(existing: boolean, failure = "") {
           PATH: `${dir}:${process.env.PATH}`,
           IMAGE_REFERENCE: `ghcr.io/example/app@sha256:${"a".repeat(64)}`,
           RELEASE_ID: "c".repeat(40),
+          READINESS_MODE: readiness,
+          DEPLOYMENT_MODE: "restore-existing",
+          MOCK_ACTIVE_SEEN: join(dir, "active-seen"),
           APP_HOSTNAME: "grocery.example.test",
           GOOGLE_CLIENT_ID: "test-client",
           GOOGLE_CLIENT_SECRET: "test-secret",
@@ -93,6 +104,27 @@ describe("production cleanup scheduling gate", () => {
         expect(commands.some((line) => line.includes("set image deployment/grocery-app"))).toBe(true);
       }
     });
+
+  it("refuses a restored environment without its reviewed restore marker", () => {
+    const { passed, commands } = deploy(true, "missing-marker");
+    expect(passed).toBe(false);
+    expect(commands.join("\n")).not.toContain("kustomize");
+  });
+
+  it("keeps maintenance jobs paused when only internal readiness is requested", () => {
+    const { passed, commands } = deploy(true, "", "internal");
+    expect(passed).toBe(true);
+    expect(commands.join("\n")).not.toContain("curl ");
+    expect(commands.join("\n")).not.toContain('"suspend":false');
+  });
+
+  it("waits for an active backup before migrations", () => {
+    const { passed, commands } = deploy(true, "active-job");
+    expect(passed).toBe(true);
+    expect(commands.filter((line) => line.includes("get jobs"))).toHaveLength(2);
+    expect(commands.findIndex((line) => line.includes("sleep 15")))
+      .toBeLessThan(commands.findIndex((line) => line.includes("kustomize")));
+  });
 
   it("keeps a newly-created scheduler suspended after readiness failure", () => {
     const { passed, commands } = deploy(false, "readiness");

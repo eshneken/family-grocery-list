@@ -58,15 +58,24 @@ Production authentication federates with Google and authorizes only active house
 
 ## OCI Architecture
 
-![Family Grocery List logical architecture on OCI](diagrams/oci-logical-architecture.png)
+```mermaid
+flowchart LR
+    Browser[Household browsers] -->|DNS lookup| DNS[GoDaddy DNS]
+    DNS -->|Manual A record| IP[Reserved OCI public IP]
+    Browser -->|HTTPS| LB[OCI load balancer]
+    IP --- LB
+    LB --> Caddy[Caddy pod / shared platform PVC]
+    Caddy --> App[Next.js app]
+    App --> DB[PostgreSQL pod / shared platform PVC]
+```
 
-The diagram shows the production network and service boundaries, runtime request path, GitHub Actions delivery path, and supporting managed services. Its editable sources are available as [Mermaid](diagrams/oci-logical-architecture.mmd) and [Excalidraw](diagrams/oci-logical-architecture.excalidraw); a vector [SVG](diagrams/oci-logical-architecture.svg) is also included.
+Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at GoDaddy. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The [SVG](diagrams/oci-logical-architecture.svg), [PNG](diagrams/oci-logical-architecture.png), and [editable Excalidraw](diagrams/oci-logical-architecture.excalidraw) show the current deployment. The [backup/recovery diagram](diagrams/oci-backup-recovery.svg) and [architecture/tool-selection reference](docs/oci-deployment-plan.md) cover identities, storage and operations.
 
 ## Logical Data Model
 
 ![Family Grocery List logical entity-relationship diagram](diagrams/logical-data-model.png)
 
-The diagram follows the production Prisma model and shows entity cardinalities, ownership, optional catalog and store associations, shopping-list lifecycle, item outcomes, and learned corrections. The editable [Mermaid ER source](diagrams/logical-data-model.mmd) and rendered [SVG](diagrams/logical-data-model.svg) are included. Mermaid ER diagrams are not currently convertible to Excalidraw by the offline renderer.
+The diagram follows the production Prisma model and shows entity cardinalities, ownership, optional catalog and store associations, shopping-list lifecycle, item outcomes, and learned corrections. The editable [Mermaid ER source](diagrams/logical-data-model.mmd) and rendered [SVG](diagrams/logical-data-model.svg) are included. The [Excalidraw ER export](diagrams/logical-data-model.excalidraw) contains one image that can be moved/annotated; individual ER entities remain editable in Mermaid.
 
 ## Application Preview
 
@@ -113,50 +122,39 @@ gh pr create --base master --fill
 
 The unit job runs linting, type checks, migrations, and Vitest with enforced minimum coverage of 95% for statements, branches, functions, and lines. The browser job runs the mock-auth journeys and production Google-auth shell journey against disposable PostgreSQL. GitHub protects `master`, applies these requirements to administrators, blocks direct pushes and force pushes, and requires changes to arrive through a pull request. A second-person approval is not required because this is currently a single-owner repository.
 
-Every non-`master` branch push runs CI without production credentials. GitHub records those required results on the pull request. Because protected `master` accepts only up-to-date pull requests with both checks passing, the merge commit does not rerun the suites; it proceeds directly to the production build and deployment. Infrastructure changes require a separate manual **OCI infrastructure** deployment after merge, as described below.
+Every non-`master` branch push runs CI without production credentials. GitHub records those required results on the pull request. Because protected `master` accepts only up-to-date pull requests with both checks passing, the merge commit does not rerun the suites; it proceeds directly to the production build and deployment. Infrastructure changes require a separate reviewed manual **OCI Always Free infrastructure** plan/apply. Application delivery is disabled until the default-branch handoff is verified; the automatic master behavior below applies after handoff.
 
 ## Production Infrastructure
 
-Production runs in OCI and is managed by the manual **OCI infrastructure** GitHub Actions workflow. Terraform is split into three ordered roots:
+The migration branch targets OCI Always Free: Basic OKE, one 2-OCPU/12 GB ARM A1 worker, PostgreSQL in Kubernetes, a shared 50 GiB Caddy/database PVC, and one fixed 10/10 Mbps flexible load balancer. GoDaddy DNS remains manual.
 
-1. [`infra/bootstrap`](infra/bootstrap/README.md) creates the versioned Object Storage state bucket plus the Vault and software key used for application secrets.
-2. [`infra/production`](infra/production/README.md) creates networking, OKE with an A1 ARM worker, private PostgreSQL, Bastion, DNS, and the reserved public IP.
-3. [`infra/cluster-foundation`](infra/cluster-foundation/README.md) creates the Kubernetes namespace, database connection material, Caddy, its persistent certificate volume, and the public OCI load balancer.
+Follow the [execution checkpoints](docs/oci-always-free-checkpoints.md) and [operator runbook](docs/oci-always-free-operations.md). Production cutover and a real shopping run passed October 8, 2026. The operator explicitly waived the seven-day hold and first scheduled-backup checkpoint after a fresh backup/scratch restore. Old foundation/platform/state storage and dedicated deployment access were retired locally on October 8; the old Vault/key are pending OCI deletion on November 7. Application delivery remains disabled until default-branch handoff. Hourly [backup alerts](docs/backup-alerts.md) already run from `master`. The new roots enforce the new tenancy/compartment, use separate state, and do not support automatic destructive resets.
 
-To add or update OCI infrastructure:
-
-1. Change the appropriate Terraform root on a branch.
-2. Run `terraform fmt -check` and `terraform validate` locally for every affected root.
-3. Open and review a pull request. Terraform changes do not deploy from pull requests.
-4. Merge to `master`.
-5. In GitHub Actions, run **OCI infrastructure** with operation `deploy`.
-6. Review all three jobs. The workflow always applies the roots in dependency order and passes bootstrap/OKE outputs between them.
-
-The `deploy` operation is idempotent and is also the normal path for later updates, such as adding an OCI service. Do not use `destroy` to roll out changes or recover from an apply failure; fix the configuration and rerun `deploy`.
-
-Destroy is intentionally difficult to trigger. It requires selecting `destroy`, typing `DESTROY`, and approving the protected `production-destroy-approval` environment. A successful destroy permanently removes PostgreSQL data, the Caddy volume/certificate cache, OKE, networking, and the Terraform state bucket.
-
-See [infra/README.md](infra/README.md) for variables, IAM/WIF policy, state handling, detailed update steps, verification, and disaster warnings.
+A local administrator prepares tenancy backup IAM and the state/Vault bootstrap. The manual **OCI Always Free infrastructure** workflow plans/applies the platform and cluster foundation separately after review. Full details are in [infra/README.md](infra/README.md).
 
 ## Application Delivery
 
 Every commit pushed to a non-`master` branch runs the **Application CI** workflow. Unit tests, linting, type checks, coverage, and browser E2E tests use an ephemeral PostgreSQL service on the GitHub runner; they never connect to production. Coverage HTML and JSON reports are retained as workflow artifacts.
 
-Successful commits on feature branches stop after CI. Branch protection requires those results before merge. A merged commit on `master` starts the separate **Application production deployment** workflow, which:
+Successful commits on feature branches stop after CI. Branch protection requires those results before merge. A merged commit on `master` starts the separate **Application Always Free deployment** workflow, which:
 
 1. Builds and attests `linux/amd64` and `linux/arm64` images in GHCR.
 2. Selects the immutable image digest rather than a mutable tag.
 3. Runs checked-in Prisma migrations from an OKE Job against private PostgreSQL.
-4. On the first release only, creates the household and initial administrator through the idempotent bootstrap Job.
+4. In `restore-existing` mode, requires the reviewed restore marker and existing household data; skips initialization. `initialize` is reserved for an explicitly empty new database.
 5. Rolls out the application, waits for database-aware readiness, and tests the public HTTPS endpoint.
 
 Later releases retain production data, skip bootstrap, apply only pending migrations, and deploy the new image. Failed migrations stop before rollout. Failed readiness or smoke tests restore the previous application image; database migrations are never automatically reversed.
 
 See [deploy/README.md](deploy/README.md) for required GitHub secrets, the one-time GHCR visibility step, initialization behavior, and operating procedures.
 
+## Documentation
+
+Current references: [architecture and tool choices](docs/oci-deployment-plan.md), [operator runbook](docs/oci-always-free-operations.md), [infrastructure roots](infra/README.md), and [application delivery](deploy/README.md). Historical records: [migration design](docs/oci-always-free-design.md), [preflight](docs/oci-always-free-preflight.md), [execution checkpoints](docs/oci-always-free-checkpoints.md), and [Google authentication implementation](docs/google-oidc-auth-implementation-plan.md). Feature behavior: [shopping timeout](docs/shopping-session-timeout.md) and [Quick Add](docs/quick-add-autocomplete-design-plan.md).
+
 ## Administrative Tasks
 
-Production PostgreSQL has no public endpoint. To inspect or administer it with local pgAdmin, create a time-limited OCI Bastion port-forwarding session, retrieve the administrator password from OCI Vault, and require TLS for the database connection. Follow [Connect Local pgAdmin To Production PostgreSQL](infra/README.md#connect-local-pgadmin-to-production-postgresql) for the complete procedure and cleanup steps.
+Production PostgreSQL is a Kubernetes StatefulSet with a private ClusterIP service. Use the distinct operator kubeconfig and authenticated `kubectl port-forward`, with the database CA and hostname verification. Follow [Database administration](docs/oci-always-free-operations.md#database-administration); no managed PostgreSQL or database Bastion is provisioned. Keep owner credentials private.
 
 ## Prerequisites
 

@@ -51,3 +51,7 @@ service-account*.json
 *-service-account.json
 secrets.json
 .gstack/
+__pycache__/
+
+# Isolated Always Free plans, state, operator configuration and recovery material
+.always-free/
