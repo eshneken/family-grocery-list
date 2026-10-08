@@ -1,6 +1,6 @@
 # OCI Always Free design and migration plan
 
-**Record status, October 8, 2026:** provisioning, rehearsal, production cutover and a canonical shopping run have passed. Daily backup jobs and GitHub backup alerts are enabled. Old retirement and default-branch handoff remain pending the rollback-hold checkpoint. This document preserves the original design/migration decisions; dated proposals below are historical. Use the [current architecture/tools](oci-deployment-plan.md) and [operator runbook](oci-always-free-operations.md) for live operations.
+**Record status, October 8, 2026:** provisioning, rehearsal, production cutover and a canonical shopping run have passed. Daily backup jobs and GitHub backup alerts are enabled. The operator explicitly waived the seven-day hold and first scheduled-backup checkpoint on October 8 after a fresh backup/scratch restore. Old foundation/platform/state storage and dedicated access are retired; the old Vault/key are pending deletion November 7. Default-branch delivery handoff remains pending. This document preserves the original design/migration decisions; dated proposals below are historical. Use the [current architecture/tools](oci-deployment-plan.md) and [operator runbook](oci-always-free-operations.md) for live operations.
 
 **Original planning status (October 5):** federation had passed and implementation was underway; the later live status is recorded above and in [execution checkpoints](oci-always-free-checkpoints.md).
 

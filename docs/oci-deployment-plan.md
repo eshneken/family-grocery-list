@@ -1,6 +1,6 @@
 # Production architecture and tool selection
 
-Production moved to the `EDFREETIER` tenancy in Ashburn on October 8, 2026. The canonical service is https://grocery.shnekendorf.com at reserved IPv4 `129.159.189.16`. The old environment is frozen during the rollback hold; it is not an active application or database dependency. The [migration design](oci-always-free-design.md) retains the historical plan and retirement checkpoints. Use the [operator runbook](oci-always-free-operations.md) for current procedures.
+Production moved to the `EDFREETIER` tenancy in Ashburn on October 8, 2026. The canonical service is https://grocery.shnekendorf.com at reserved IPv4 `129.159.189.16`. The old grocery environment was retired October 8 after an explicit operator waiver of the hold; its Vault/key deletion is pending until November 7. It is not an application or database dependency. The [migration design](oci-always-free-design.md) retains the historical plan and retirement checkpoints. Use the [operator runbook](oci-always-free-operations.md) for current procedures.
 
 ## Selected tools and responsibilities
 
@@ -56,4 +56,4 @@ One worker, one database pod, one Caddy replica and one shared disk are delibera
 
 ## Delivery handoff status
 
-Production is already serving from the migration branch's reviewed image. During the rollback hold, `application.yml` remains disabled to prevent old master from reopening the old writers. The isolated backup-health workflow is already on `master` and active. After the old teardown checkpoint, merge the migration PR, verify all default-branch jobs select `always-free`, enable application delivery, and deploy in `restore-existing` mode. The existing database and bootstrap marker must survive that first master deployment.
+Production is already serving from the migration branch's reviewed image. Until the default-branch handoff, `application.yml` remains disabled. The isolated backup-health workflow is already on `master` and active. Old foundation/platform/state storage and dedicated access cleanup passed. Merge the migration PR after required CI, verify all default-branch jobs select `always-free`, enable application delivery, and deploy in `restore-existing` mode. The existing database and bootstrap marker must survive that first master deployment.

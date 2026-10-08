@@ -1,6 +1,6 @@
 # OCI Always Free infrastructure
 
-These roots target **EDFREETIER / grocery / us-ashburn-1** exclusively. Canonical production is live here; the old environment is frozen during the rollback hold. Master retains legacy deployment code until the retirement/merge checkpoint, with application delivery disabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
+These roots target **EDFREETIER / grocery / us-ashburn-1** exclusively. Canonical production is live here; the old grocery environment has been retired after explicit waiver of the rollback hold. Master retains legacy deployment code until the merge checkpoint, with application delivery disabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
 
 Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [operator runbook](../docs/oci-always-free-operations.md). Provisioning and data cutover are separate checkpoints.
 
@@ -27,7 +27,7 @@ An apply requires a clean checkout, `CONFIRM_APPLY_SHA` equal to the full review
 
 The manual **OCI Always Free infrastructure** workflow runs one selected stage (`production` or `cluster-foundation`) with `plan` or `apply`. It reads bootstrap outputs from the new state bucket and authenticates only through `always-free`. The local administrator handles initial tenancy prerequisites and bootstrap; the deployer is not granted tenancy-wide IAM writes.
 
-The branch application workflow supports manual dispatch, but application delivery is currently disabled to prevent old master from reopening writers. The isolated hourly backup monitor is already merged and active on master. Do not merge until old-environment retirement has completed. `always-free` already permits `master` and the migration branch, and canonical hostname/OAuth/session values are installed. Before handoff, verify those settings and retain the same federation subject.
+The branch application workflow supports manual dispatch, but application delivery is currently disabled to prevent old master from reopening writers. The isolated hourly backup monitor is already merged and active on master. Old-environment retirement is complete; its Vault/key deletion waiting period ends November 7. Merge only after required CI passes. `always-free` already permits `master` and the migration branch, and canonical hostname/OAuth/session values are installed. Before handoff, verify those settings and retain the same federation subject.
 
 ## Storage and recovery
 
