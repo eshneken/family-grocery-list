@@ -7,7 +7,7 @@ variable "approved_target" {
 variable "tenancy_ocid" {
   validation {
     condition     = var.tenancy_ocid == var.approved_target.tenancy_ocid
-    error_message = "Inputs must match the approved private target; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse state from another target."
   }
   type      = string
   sensitive = true
@@ -16,7 +16,7 @@ variable "tenancy_ocid" {
 variable "compartment_ocid" {
   validation {
     condition     = var.compartment_ocid == var.approved_target.compartment_ocid
-    error_message = "Inputs must match the approved private target; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse state from another target."
   }
   type      = string
   sensitive = true
@@ -25,7 +25,7 @@ variable "compartment_ocid" {
 variable "region" {
   validation {
     condition     = var.region == "us-ashburn-1"
-    error_message = "Inputs must match the approved private target; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse state from another target."
   }
   type = string
 }
@@ -37,7 +37,7 @@ variable "oci_auth" {
 }
 
 variable "app_hostname" {
-  description = "Public application hostname managed by an external DNS provider, such as GoDaddy."
+  description = "Public application hostname managed by an external DNS provider."
   type        = string
 
   validation {
@@ -69,7 +69,7 @@ variable "node_count" {
 }
 
 variable "node_availability_domain" {
-  description = "Tenancy-specific availability domain name for the managed OKE worker, for example cGkv:US-ASHBURN-AD-1."
+  description = "Tenancy-specific availability domain name for the managed OKE worker, obtained privately from the regional availability-domain API."
   type        = string
 
   validation {
@@ -158,7 +158,7 @@ variable "node_image_id" {
   type        = string
 }
 variable "operator_api_cidrs" {
-  description = "API source CIDRs. Operator approved public access while traveling; revisit after build."
+  description = "API source CIDRs; select operator and CI access requirements explicitly."
   type        = set(string)
   default     = ["0.0.0.0/0"]
   validation {

@@ -1,5 +1,3 @@
-> Canonical production is live in the Always Free tenancy through `always-free`. The old grocery environment and its deployment access have been retired. The migration is merged and application delivery is enabled on `master`; use `restore-existing` against the running database. See the [operator runbook](../docs/oci-always-free-operations.md).
-
 # Application Deployment
 
 Application delivery is split between `.github/workflows/application-ci.yml` and `.github/workflows/application.yml`. Terraform owns OCI and the durable cluster foundation. The CI workflow validates feature branches, while the production workflow owns the application image, database migration Jobs, initial household bootstrap, Deployment, and internal `grocery-app` Service.
@@ -21,7 +19,7 @@ Protected `master` requires **Unit tests and coverage** and **Browser E2E tests*
 
 ## Production Environment Settings
 
-The migration branch uses the separate GitHub `always-free` environment, which supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#federation). Add these application secrets:
+Production jobs use the GitHub `always-free` environment, which supplies the OCI WIF values documented in the [OCI infrastructure guide](../infra/README.md#federation). Add these application secrets:
 
 | Secret | Purpose |
 | --- | --- |
@@ -61,7 +59,7 @@ The local and production clients represent the same application, so they can and
    Adding `example.com` permits the project's clients to use that domain and its subdomains. It does not remove or invalidate the local client's `localhost` redirect; localhost is a special development exception and is not entered as an authorized domain.
 
 3. Open **Audience** and select **External** for consumer Gmail accounts. If every intended user belongs to the same managed Google Workspace organization, **Internal** is also valid but blocks all accounts outside that organization.
-4. The application requests only the standard `openid`, `email`, and `profile` sign-in scopes. Google exempts this scope set from Testing mode's test-user restriction, warning, and seven-day authorization expiration. For this personal deployment, leaving the shared project in **Testing** is acceptable. Publishing it is optional; if you choose **Publish app**, complete the branding, domain-ownership, and policy-page requirements shown by the console.
+4. The application requests only the standard `openid`, `email`, and `profile` sign-in scopes. Google exempts this scope set from Testing mode's test-user restriction, warning, and seven-day authorization expiration. For a deployment using only these scopes, leaving the shared project in **Testing** is acceptable. Publishing it is optional; if you choose **Publish app**, complete the branding, domain-ownership, and policy-page requirements shown by the console.
 5. Open **Data Access** and confirm the configured scopes are limited to `openid`, the Google account email address, and basic profile information. Do not add Google API scopes that the application does not use.
 6. Open **Clients**, choose **Create client**, and select **Web application**. Name it `Family Grocery List Production`.
 7. Leave **Authorized JavaScript origins** empty. Auth.js performs this OAuth exchange on the server and does not use Google's browser JavaScript client.
@@ -88,7 +86,7 @@ The local and production clients represent the same application, so they can and
    Never commit the client secret or place it in a GitHub variable. GitHub does not expose an existing secret value, so updating these names safely replaces the prior local-client credentials.
 10. Confirm `INITIAL_ADMIN_EMAIL` in the same GitHub environment is the exact Gmail address that will sign in. The application's database allowlist remains the authorization boundary even though Google's basic sign-in scopes do not require the account to be listed as an OAuth test user.
 
-Public DNS is hosted externally at GoDaddy. After infrastructure creates or changes the reserved load balancer IP, [manually update the hostname’s A record](../infra/production/README.md#external-dns-setup-godaddy) using the production `reserved_public_ip` output. Caddy manages certificate issuance and renewal without DNS-provider credentials.
+Public DNS is hosted externally with your chosen provider. After infrastructure creates or changes the reserved load balancer IP, [manually update the hostname’s A record](../infra/production/README.md#external-dns-setup) using the production `reserved_public_ip` output. Caddy manages certificate issuance and renewal without DNS-provider credentials.
 
 Before starting or rerunning a production deployment, verify DNS and TLS reach Caddy rather than a localhost service:
 
@@ -114,9 +112,9 @@ OKE pulls the image anonymously so the cluster does not retain a long-lived GitH
 
 Do not replace this with a short-lived workflow token stored as an OKE image-pull Secret; pods must remain pullable after the workflow token expires or a node restarts.
 
-## Empty installation versus restored production
+## Installation and existing databases
 
-The current production database was restored and its marker was created only after validated transfer. Routine deployment defaults to `restore-existing`, requires existing household data and the marker, and never seeds that database. The steps below describe an explicitly empty installation selected with `deployment_mode=initialize`; they are not migration instructions.
+Routine deployment defaults to `restore-existing`: it requires existing household data and an initialization marker, and never seeds that database. The same guard supports initialized installations and reviewed backup recovery. Select `deployment_mode=initialize` explicitly only for an empty installation. The mode name is a compatibility contract used by the in-cluster database check.
 
 ## Initial Deployment
 

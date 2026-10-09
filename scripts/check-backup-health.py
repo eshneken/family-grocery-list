@@ -96,7 +96,7 @@ def main():
     parser.add_argument("--kubectl", default="kubectl")
     parser.add_argument("--oci-profile", required=True)
     parser.add_argument("--oci-auth", choices=["api_key", "security_token"], default="api_key")
-    parser.add_argument("--allow-suspended", action="store_true", help="Rehearsal checks only")
+    parser.add_argument("--allow-suspended", action="store_true", help="Permit a deliberately paused installation/recovery check")
     parser.add_argument("--report")
     args = parser.parse_args()
     target = load_target()

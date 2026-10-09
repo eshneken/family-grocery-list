@@ -1,38 +1,32 @@
-# OCI Always Free infrastructure
+# OCI infrastructure
 
-These roots target **configured target tenancy / compartment / region** exclusively. Canonical production is live here; the old grocery environment has been retired after explicit waiver of the rollback hold. Master now contains the Always Free deployment implementation; application delivery is enabled. Do not run these roots against old state or copy old ignored `terraform.tfvars`/backend files. The legacy teardown must use pinned commit `813968f` as described in the [migration design](../docs/oci-always-free-design.md).
+These Terraform roots provision one configured deployment in a free-tier eligible footprint. All tenancy/resource IDs, profile details, public hostnames and contact information come from private target configuration. Follow the [setup guide](../docs/oci-setup.md), [architecture](../docs/oci-architecture.md) and [operator runbook](../docs/oci-operations.md).
 
-Follow the [execution checkpoints](../docs/oci-always-free-checkpoints.md) and [operator runbook](../docs/oci-always-free-operations.md). Provisioning and data cutover are separate checkpoints.
-
-| Root | Owner and resources | State |
+| Root | Resources | State key |
 |---|---|---|
-| `tenancy-identity` | Local administrator: defined backup tag, worker dynamic group, bucket-scoped IAM | Initially local; after bootstrap, private remote `tenancy-identity/terraform.tfstate` (local administrator operations only) |
-| `bootstrap` | Private versioned state bucket, private backup bucket, DEFAULT Vault and SOFTWARE key | New bucket: `bootstrap/terraform.tfstate` after local bootstrap migration |
-| `production` | Basic OKE, one A1 2 OCPU/12 GB worker, 50 GB boot disk, private networking/NAT/Service Gateway, public API, reserved LB IP, optional troubleshooting Bastion, DB secrets/TLS | New bucket: `production/terraform.tfstate` |
-| `cluster-foundation` | PostgreSQL 16, Caddy, one retained shared 50 GiB PVC, one flexible TCP LB fixed at 10/10 Mbps, daily backup CronJob | New bucket: `cluster-foundation/terraform.tfstate` |
+| `tenancy-identity` | Backup tag, worker dynamic group and bucket-scoped IAM; local administrator only | `tenancy-identity/terraform.tfstate` |
+| `bootstrap` | Private versioned state bucket, private backup bucket, DEFAULT Vault and SOFTWARE key | `bootstrap/terraform.tfstate` |
+| `production` | Basic OKE, one A1 2/12 worker, 50 GB boot, private networking, public API, reserved LB IP, optional Bastion and database secrets/TLS | `production/terraform.tfstate` |
+| `cluster-foundation` | PostgreSQL 16, Caddy, one retained shared 50 GiB PVC, one 10/10 Mbps flexible LB and daily backup CronJob | `cluster-foundation/terraform.tfstate` |
 
-The API permits IPv4 sources during the build, as explicitly requested October 6 while the operator is traveling. OCI IAM authentication, Kubernetes RBAC and verified TLS remain required. PostgreSQL, worker/kubelet and NodePorts are private. API allowlisting is a separate follow-up, configured with `operator_api_cidrs`.
+Identity and bootstrap start with private local state before the state bucket exists. The helper moves that state to separate keys in the private bucket. Preserve existing state on updates; do not initialize a second state for resources that already exist.
 
 ## Federation
 
-GitHub uses the `always-free` environment and the identity-domain audience `grocery-always-free-github`. Its subject is exactly `repo:eshneken/family-grocery-list:environment:always-free`. The deployed principal is **grocery-github-service**, created with `serviceUser=true`. Regular users cannot be converted to service users. Setup/verification evidence is in [checkpoint 1](../docs/oci-always-free-checkpoints.md#federation-verification-record).
+GitHub jobs select `environment: always-free`, with exact subject `repo:<owner>/<repository>:environment:always-free`. The operator creates a service user (`serviceUser=true` at creation), compartment-scoped deployment group/policy, runtime OAuth application and identity propagation trust. The [setup guide](../docs/oci-setup.md#github-to-oci-federation) covers this administrator bootstrap. Workers use an instance principal for backups; humans use their own configured OCI profile. CI does not use either identity.
 
-The temporary administrator OAuth application is deactivated/deleted after verification. The runtime application stays active. No OKE pod workload identity is needed: backup pods use the worker's instance principal, CI uses federation, and humans use their own local OCI profile.
+The environment secret `OCI_TARGET_CONFIG` holds the approved target record and `OCI_WIF_CLIENT_SECRET` holds the runtime OAuth secret. The loader masks values before authentication. The temporary administrator application/secret is never installed in GitHub and should be deactivated after verification.
 
 ## Changes and updates
 
-Use `scripts/always-free-terraform.sh ROOT plan` to stage source into a private working directory, verify the authenticated target namespace, initialize the new backend and review changes. It does not use existing root-local tfvars/state. `ALWAYS_FREE_VARS_FILE` supplies an absolute path to an ignored new-environment file; environment `TF_VAR_*` values are also supported.
+Use `scripts/always-free-terraform.sh ROOT plan` to stage source into a private working directory, verify the authenticated namespace, initialize the backend and review changes. Root-local tfvars/state are not consumed. `ALWAYS_FREE_VARS_FILE` supplies an absolute ignored variables file; `TF_VAR_*` values supply other non-identity inputs.
 
-An apply requires a clean checkout, `CONFIRM_APPLY_SHA` equal to the full reviewed commit SHA, and the plan guard passing. No normal update command permits destroy/replacement. After reviewing the plan, run the same root with `apply`; it regenerates and checks the plan immediately before apply. State/plan files contain credentials and must not be uploaded as workflow artifacts or committed.
+An apply requires a clean checkout, `CONFIRM_APPLY_SHA` equal to the full reviewed commit SHA and a passing plan guard. The helper regenerates/checks its plan immediately before applying. Deletion and replacement require a separate reviewed recovery procedure. State/plan files contain credentials and must never be committed or uploaded as workflow artifacts.
 
-The manual **OCI Always Free infrastructure** workflow runs one selected stage (`production` or `cluster-foundation`) with `plan` or `apply`. It reads bootstrap outputs from the new state bucket and authenticates only through `always-free`. The local administrator handles initial tenancy prerequisites and bootstrap; the deployer is not granted tenancy-wide IAM writes.
-
-Application delivery is enabled on `master`, supports manual dispatch and defaults to `restore-existing`. The hourly backup monitor is active on master. Old-environment retirement is complete; its Vault/key deletion waiting period ends November 7. `always-free` already permits `master` and the migration branch, and canonical hostname/OAuth/session values are installed. Retain those settings and the same federation subject on updates.
+The manual **OCI Always Free infrastructure** workflow supports `production` and `cluster-foundation` with `plan` or `apply`. Administrator IAM and initial bootstrap run locally. Application releases run from protected `master`; the hourly [backup monitor](../docs/backup-alerts.md) runs on the same default branch.
 
 ## Storage and recovery
 
-The worker boot disk plus shared data disk initially allocate approximately 100 GB, subject to actual OCI rounding. Caddy mounts only `caddy`; PostgreSQL mounts only `postgres`. Neither consumer recursively changes the shared root's ownership. The claim has `prevent_destroy`, and the StorageClass retains its PV; removal of Terraform configuration can bypass lifecycle protection, so always review plans and actual retained disks.
+The worker boot disk and shared data disk allocate approximately 100 GB, subject to OCI rounding and GiB/GB conversion. PostgreSQL mounts `postgres`; Caddy mounts `caddy`. Neither recursively changes ownership of the shared root. The claim has `prevent_destroy` and a Retain storage policy; removing configuration can bypass lifecycle protection, so review both plans and retained disks.
 
-Daily backups upload an age-encrypted custom dump and completion manifest, then retain the last five completed backups. A failed dump/upload never prunes completed backups. Upload-only instance IAM cannot read backup contents or Terraform state. Keep the age private recovery key outside OCI and GitHub. Backups start suspended in a new installation; production now has `OCI_BACKUPS_ENABLED=true` after successful backup/restore and IAM-negative-access tests. Preserve that setting on updates.
-
-Current health checks, database access, backup drills, recovery and release procedures are in the [operator runbook](../docs/oci-always-free-operations.md). The [architecture/tool reference](../docs/oci-deployment-plan.md) describes current selections; legacy destruction remains only in the archived migration design. Ordinary rollout is not a disaster restore or teardown.
+Backups start suspended in a fresh installation. Enable them only after verifying encryption, upload, scratch restore and worker permission boundaries; preserve `OCI_BACKUPS_ENABLED=true` on subsequent updates. Keep the private age key outside OCI and GitHub. See [operations](../docs/oci-operations.md#backups-and-restore-drills).

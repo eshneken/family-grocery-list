@@ -287,7 +287,7 @@ Command:
 
 ```bash
 npm run db:bootstrap -- \
-  --admin-email family-admin@gmail.com \
+  --admin-email admin@example.com \
   --household-name "Smith Family"
 ```
 
@@ -356,7 +356,7 @@ Files:
 
 - `README.md`
 - `.env.example`
-- `docs/oci-deployment-plan.md`
+- `docs/oci-architecture.md`
 
 Actions:
 
@@ -459,7 +459,7 @@ Lane A and the initial bootstrap service in C can start in parallel if C tempora
   - Verify: `npm run typecheck && npm test && npm run test:coverage && npm run e2e`.
 - [x] **T7 (P2, human: ~3h / Codex: ~20m)** - Operations - Update local setup, Google callback configuration, OCI secrets, bootstrap ordering, and live release checks.
   - Surfaced by: deployment review - the current OCI plan assumes v5-style variable names and lacks an executable bootstrap step.
-  - Files: `README.md`, `.env.example`, `docs/oci-deployment-plan.md`
+  - Files: `README.md`, `.env.example`, `docs/oci-architecture.md`
   - Verify: fresh local setup walkthrough and recorded production allow/deny/cookie smoke test.
 
 ## Branch Verification

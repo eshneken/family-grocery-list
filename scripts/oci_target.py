@@ -13,7 +13,7 @@ REQUIRED = ('tenancy_ocid', 'compartment_ocid', 'region', 'namespace', 'cluster_
             'wif_client_id', 'wif_service_user_ocid', 'wif_audience', 'node_image_id', 'node_availability_domain', 'app_hostname', 'caddy_acme_email', 'backup_age_recipient')
 
 
-def load_target():
+def load_target(*, allow_unprovisioned_cluster=False):
     raw = os.environ.get('OCI_TARGET_CONFIG_JSON')
     if raw is None:
         path = os.environ.get('OCI_TARGET_CONFIG_FILE')
@@ -27,11 +27,20 @@ def load_target():
         target = json.loads(raw)
     except (ValueError, TypeError):
         raise ValueError('Invalid OCI target configuration') from None
-    if not isinstance(target, dict) or set(target) != set(REQUIRED) or any(not isinstance(target.get(k), str) or not target[k].strip()
-                                          or any(c in target[k] for c in '\r\n') for k in REQUIRED):
+    required_strings = [k for k in REQUIRED if k != 'cluster_ocid']
+    if not isinstance(target, dict) or set(target) != set(REQUIRED) or any(
+            not isinstance(target.get(k), str) or not target[k].strip()
+            or any(c in target[k] for c in '\r\n') for k in required_strings):
         raise ValueError('Approved OCI target configuration is incomplete')
+    cluster = target['cluster_ocid']
+    if cluster is None and allow_unprovisioned_cluster:
+        pass
+    elif not isinstance(cluster, str) or not cluster.strip() or any(c in cluster for c in '\r\n'):
+        raise ValueError('Approved cluster identity is required')
     for key, kind in [('tenancy_ocid', 'tenancy'), ('compartment_ocid', 'compartment'),
                       ('cluster_ocid', 'cluster'), ('wif_service_user_ocid', 'user'), ('node_image_id', 'image')]:
+        if key == 'cluster_ocid' and target[key] is None and allow_unprovisioned_cluster:
+            continue
         if not target[key].startswith('ocid1.' + kind + '.'):
             raise ValueError('Invalid OCI target identifier type')
     if target['region'] != 'us-ashburn-1':
@@ -43,7 +52,7 @@ def load_target():
 
 
 def exports(target):
-    env = {'OCI_' + k.upper(): v for k, v in target.items()}
+    env = {'OCI_' + k.upper(): v for k, v in target.items() if v is not None}
     env['OCI_OBJECT_NAMESPACE'] = target['namespace']
     env['APP_HOSTNAME'] = target['app_hostname']
     env['TF_VAR_approved_target'] = json.dumps({k: target[k] for k in ['tenancy_ocid', 'compartment_ocid', 'region']})
@@ -60,8 +69,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--shell', action='store_true')
     p.add_argument('--github', action='store_true')
+    p.add_argument('--allow-unprovisioned-cluster', action='store_true',
+                   help='Infrastructure setup only; permit a null cluster identity before creation')
     args = p.parse_args()
-    target = load_target()
+    target = load_target(allow_unprovisioned_cluster=args.allow_unprovisioned_cluster)
     env = exports(target)
     if args.github:
         for value in set(env.values()):

@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# Isolated target-bound working copies: never consume legacy ignored tfvars/state.
+# Isolated target-bound working copies: never consume unreviewed root-local tfvars/state.
 set -euo pipefail
 stage="${1:?stage: tenancy-identity, bootstrap, production or cluster-foundation}"
 operation="${2:-plan}"
 case "$stage" in tenancy-identity|bootstrap|production|cluster-foundation) ;; *) exit 2 ;; esac
 case "$operation" in plan|apply) ;; *) exit 2 ;; esac
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
-target_exports="$(python3 "$repo_dir/scripts/oci_target.py" --shell)"
+target_args=(--shell)
+[[ "$stage" == cluster-foundation ]] || target_args+=(--allow-unprovisioned-cluster)
+target_exports="$(python3 "$repo_dir/scripts/oci_target.py" "${target_args[@]}")"
 eval "$target_exports"
 profile="${OCI_CLI_PROFILE:-$OCI_OPERATOR_PROFILE}"
 auth="${TF_VAR_oci_auth:-ApiKey}"
@@ -19,7 +21,7 @@ if [[ "$operation" == apply && "${CONFIRM_APPLY_SHA:-}" != "$(git -C "$repo_dir"
   exit 1
 fi
 if [[ "$operation" == apply && -n "$(git -C "$repo_dir" status --porcelain)" ]]; then
-  echo 'Apply requires a clean migration checkout at the reviewed commit.' >&2
+  echo 'Apply requires a clean checkout at the reviewed commit.' >&2
   exit 1
 fi
 umask 077
@@ -27,7 +29,7 @@ work_dir="${ALWAYS_FREE_WORK_DIR:-$repo_dir/.always-free/terraform}/$stage"
 mkdir -p "$work_dir"
 # Remove only staged source definitions, preserving private plans/backend state.
 for staged in "$work_dir/"*.tf; do [[ ! -f "$staged" ]] || rm "$staged"; done
-# Copy source only, never .terraform, old backend config, tfvars or state.
+# Copy source only, never .terraform, root-local backend config, tfvars or state.
 for source in "$repo_dir/infra/$stage/"*.tf; do cp "$source" "$work_dir/"; done
 if [[ -f "$repo_dir/infra/$stage/.terraform.lock.hcl" ]]; then
   cp "$repo_dir/infra/$stage/.terraform.lock.hcl" "$work_dir/"

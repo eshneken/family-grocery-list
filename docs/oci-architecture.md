@@ -1,6 +1,6 @@
 # Production architecture and tool selection
 
-Production moved to the `${OCI_CLI_PROFILE}` tenancy in Ashburn on October 8, 2026. The canonical service is https://grocery.example.com at reserved IPv4 `${PRODUCTION_IPV4}`. The old grocery environment was retired October 8 after an explicit operator waiver of the hold; its Vault/key deletion is pending until November 7. It is not an application or database dependency. The [migration design](oci-always-free-design.md) retains the historical plan and retirement checkpoints. Use the [operator runbook](oci-always-free-operations.md) for current procedures.
+This app runs in a bounded OCI footprint designed to fit eligible free-tier resources. Deployment identity, domains and public addresses are private configuration. Use the [setup guide](oci-setup.md) to provision an installation and the [operator runbook](oci-operations.md) to maintain it.
 
 ## Selected tools and responsibilities
 
@@ -9,10 +9,10 @@ Production moved to the `${OCI_CLI_PROFILE}` tenancy in Ashburn on October 8, 20
 | Application | Next.js, React, TypeScript | One application replica; Google authentication and household membership authorization |
 | Database access | Prisma | Checked-in schema/migrations; migration Job uses owner permissions; runtime uses DML permissions |
 | PostgreSQL | PostgreSQL 16 Bookworm StatefulSet in OKE | Self-operated database, `UTF8` / `C.UTF-8`, internal TLS; no OCI managed PostgreSQL service |
-| Compute/orchestration | Basic OKE v1.36.4, one ARM64 A1 worker | 2 OCPUs / 12 GB RAM in Ashburn AD-3; 50 GB boot; IMDSv1 disabled |
+| Compute/orchestration | Basic OKE, one ARM64 A1 worker | 2 OCPUs / 12 GB RAM in the configured availability domain; 50 GB boot; IMDSv1 disabled |
 | Data storage | Retained OCI Block Volume through CSI | One 50 GiB RWO `platform-data` claim shared by separate PostgreSQL and Caddy subdirectories |
 | Public entry | One OCI flexible load balancer | TCP 80/443, minimum and maximum both 10 Mbps; Caddy terminates TLS |
-| DNS | GoDaddy | Manual canonical A record; Terraform does not manage public DNS |
+| DNS | External DNS provider | Manual canonical A record; Terraform does not manage public DNS |
 | Edge TLS | Caddy / Let's Encrypt | ACME state persists on the shared claim; app releases do not restart Caddy |
 | Database backups | Kubernetes CronJob, PostgreSQL 16 tools, age, OCI SDK | Daily at 09:00 UTC; encrypted custom dump plus completion manifest; retain last five complete backups |
 | Backup authentication | Worker instance principal | Defined-tag dynamic group; upload/list/delete permissions; backup and state content reads denied |
@@ -24,13 +24,13 @@ Production moved to the `${OCI_CLI_PROFILE}` tenancy in Ashburn on October 8, 20
 | Human access | OCI CLI `${OCI_CLI_PROFILE}`, kubectl, Lens, optional pgAdmin | Distinct operator kubeconfig; authenticated database port-forward; no database Bastion is provisioned |
 | Local development | Docker Compose PostgreSQL | Separate disposable data; Vitest and Playwright validate application behavior |
 
-The quota guard permits one flexible LB with 10 Mbps total bandwidth and one network LB, with no allowance for the old fixed LB shapes. **Only the flexible LB is deployed**; the network LB allowance is available for a separate future use. Other quota restrictions remain in place. Check actual tenancy usage and entitlement before a second app; do not infer unused tenancy capacity from this application's allocation alone.
+Configure tenancy quotas to limit flexible load balancers to one with 10 Mbps total bandwidth and deny fixed-shape load balancers. This implementation deploys only that flexible load balancer. Any network load balancer allowance or other workload consumes separately verified tenancy entitlements. Check current account mode, home-region eligibility and all other usage before provisioning; resource sizes alone do not establish free billing.
 
 ## Diagrams
 
 - [Production architecture](../diagrams/oci-logical-architecture.svg), with [Mermaid source](../diagrams/oci-logical-architecture.mmd) and [editable Excalidraw](../diagrams/oci-logical-architecture.excalidraw).
 - [Backup and recovery flow](../diagrams/oci-backup-recovery.svg), with [Mermaid source](../diagrams/oci-backup-recovery.mmd) and [editable Excalidraw](../diagrams/oci-backup-recovery.excalidraw).
-- [Logical data model](../diagrams/logical-data-model.svg), generated from the unchanged [Prisma schema](../prisma/schema.prisma). Infrastructure migration does not change household IDs, memberships, lists or shopping history.
+- [Logical data model](../diagrams/logical-data-model.svg), generated from the [Prisma schema](../prisma/schema.prisma).
 
 ## Network and identity boundaries
 
@@ -42,7 +42,7 @@ The quota guard permits one flexible LB with 10 Mbps total bandwidth and one net
 | Worker subnet | `10.40.10.0/24` | Private A1 worker |
 | Pod subnet | `10.40.20.0/22` | Private VCN-native pod networking |
 
-NAT provides required internet egress; the Service Gateway provides OCI service access. PostgreSQL is a private ClusterIP service at `postgres.grocery.svc.cluster.local:5432`, not a separate OCI database subnet or public endpoint. Worker/kubelet and NodePorts have no public ingress. API source access remains `0.0.0.0/0` by the operator's travel/build decision; source allowlisting is a separate future change. No enforced Kubernetes NetworkPolicy layer is installed, so do not describe namespace placement as pod-level traffic isolation.
+NAT provides required internet egress; the Service Gateway provides OCI service access. PostgreSQL is a private ClusterIP service at `postgres.grocery.svc.cluster.local:5432`, not a separate OCI database subnet or public endpoint. Worker/kubelet and NodePorts have no public ingress. The default API source rule is `0.0.0.0/0`; set `operator_api_cidrs` for your access requirements and ensure CI can reach the endpoint. No enforced Kubernetes NetworkPolicy layer is installed, so do not describe namespace placement as pod-level traffic isolation.
 
 Backups use instance-principal authentication through IMDSv2. CI uses federation; operators use their own profile. Basic OKE pod workload identity is not part of this design. Never launch a replacement VM with IMDSv1 enabled; verify the actual instance option, shape, defined tag and boot volume after any worker replacement.
 
@@ -54,6 +54,3 @@ The worker and shared data disk allocate about 100 GB combined. The 50 GiB claim
 
 One worker, one database pod, one Caddy replica and one shared disk are deliberate single points of failure. Database patching, capacity, restore drills and certificate monitoring are operator responsibilities. Logical backups are daily recovery points, not continuous replication or managed point-in-time recovery. Reattach the retained volume in its availability domain after worker failure; do not initialize a replacement empty database over existing data.
 
-## Delivery handoff status
-
-The [migration PR #27](https://github.com/eshneken/family-grocery-list/pull/27) passed all three CI checks and is merged into `master`. Application delivery is enabled and defaults to `restore-existing`; all production deployment jobs select `always-free`. The hourly backup-health workflow is active. Existing database contents and the reviewed bootstrap marker are preserved across releases; initialization is reserved for an explicitly empty installation.

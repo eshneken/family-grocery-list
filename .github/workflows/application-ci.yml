@@ -42,7 +42,7 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
-      - name: Verify migration bootstrap isolation
+      - name: Verify OCI target, backup and public-configuration safeguards
         run: |
           python3 -B scripts/test_bootstrap_always_free_wif.py
           python3 -B scripts/test_always_free_operations.py

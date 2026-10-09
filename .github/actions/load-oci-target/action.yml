@@ -4,10 +4,17 @@ inputs:
   configuration:
     required: true
     description: Private OCI target configuration JSON from the environment secret.
+  allow-unprovisioned-cluster:
+    description: Infrastructure setup only; permit a null cluster identity before creation.
+    default: 'false'
 runs:
   using: composite
   steps:
     - shell: bash
       env:
         OCI_TARGET_CONFIG_JSON: ${{ inputs.configuration }}
-      run: python3 scripts/oci_target.py --github
+        ALLOW_UNPROVISIONED_CLUSTER: ${{ inputs.allow-unprovisioned-cluster }}
+      run: |
+        args=(--github)
+        [[ "$ALLOW_UNPROVISIONED_CLUSTER" != true ]] || args+=(--allow-unprovisioned-cluster)
+        python3 scripts/oci_target.py "${args[@]}"
