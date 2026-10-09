@@ -15,7 +15,7 @@ on:
         type: choice
         default: restore-existing
         options: [restore-existing, initialize]
-        description: Restored environment or explicitly empty database initialization.
+        description: Existing initialized database or explicitly empty installation.
       readiness_mode:
         type: choice
         default: public
@@ -88,8 +88,8 @@ jobs:
           fi
 
   deploy:
-    name: Migrate and deploy production
-    if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/codex/oci-always-free'
+    name: Apply schema changes and deploy production
+    if: github.ref == 'refs/heads/master'
     needs: container
     runs-on: ubuntu-latest
     environment: always-free
@@ -145,7 +145,7 @@ jobs:
             --auth security_token \
             --profile DEFAULT
           echo "KUBECONFIG=${kubeconfig_path}" >> "$GITHUB_ENV"
-      - name: Run migration, initialization, and rollout
+      - name: Run schema changes, initialization, and rollout
         run: ./scripts/deploy-application.sh
       - name: Record release summary
         if: success()
@@ -160,7 +160,7 @@ jobs:
 
   backup-image:
     name: Build and publish PostgreSQL backup image
-    if: inputs.operation == 'build-backup-only' && (github.ref == 'refs/heads/codex/oci-always-free' || github.ref == 'refs/heads/master')
+    if: inputs.operation == 'build-backup-only' && (github.ref == 'refs/heads/master')
     timeout-minutes: 45
     permissions:
       contents: read

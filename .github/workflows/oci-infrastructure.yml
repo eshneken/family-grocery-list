@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   infrastructure:
-    if: github.ref == 'refs/heads/codex/oci-always-free' || github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master'
     runs-on: ubuntu-latest
     environment: always-free
     timeout-minutes: 120
@@ -42,6 +42,7 @@ jobs:
       - uses: ./.github/actions/load-oci-target
         with:
           configuration: ${{ secrets.OCI_TARGET_CONFIG }}
+          allow-unprovisioned-cluster: ${{ inputs.stage == 'production' }}
       - uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4
         with:
           terraform_version: 1.15.5

@@ -16,7 +16,7 @@ ALLOWED_OCI = {
 
 
 def check(plan, nodepool_retry_only=False, target=None):
-    target = target or load_target()
+    target = target or load_target(allow_unprovisioned_cluster=True)
     for key in ("tenancy_ocid", "compartment_ocid", "region"):
         if key in plan.get("variables", {}) and plan["variables"][key]["value"] != target[key]:
             raise ValueError("Plan inputs differ from the approved target")

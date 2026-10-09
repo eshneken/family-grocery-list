@@ -1,0 +1,19 @@
+{
+  "tenancy_ocid": "REPLACE_TENANCY_OCID",
+  "compartment_ocid": "REPLACE_COMPARTMENT_OCID",
+  "region": "us-ashburn-1",
+  "namespace": "REPLACE_NAMESPACE",
+  "cluster_ocid": null,
+  "state_bucket": "REPLACE_STATE_BUCKET",
+  "backup_bucket": "REPLACE_BACKUP_BUCKET",
+  "operator_profile": "REPLACE_OPERATOR_PROFILE",
+  "wif_domain_url": "https://identity.example.com",
+  "wif_client_id": "REPLACE_WIF_CLIENT_ID",
+  "wif_service_user_ocid": "REPLACE_WIF_SERVICE_USER_OCID",
+  "wif_audience": "REPLACE_WIF_AUDIENCE",
+  "node_image_id": "REPLACE_NODE_IMAGE_ID",
+  "node_availability_domain": "REPLACE_NODE_AVAILABILITY_DOMAIN",
+  "app_hostname": "grocery.example.com",
+  "caddy_acme_email": "operator@example.com",
+  "backup_age_recipient": "REPLACE_BACKUP_AGE_RECIPIENT"
+}

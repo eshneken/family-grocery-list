@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
-from oci_target import load_target
+from oci_target import load_target, exports
 from oci_target_fixture import TARGET
 
 spec = importlib.util.spec_from_file_location('guard', Path(__file__).with_name('check-always-free-plan.py'))
@@ -39,6 +39,26 @@ class TargetTests(unittest.TestCase):
                        {'namespace': 'value\nENV=injection'}]:
             with patch.dict(os.environ, {'OCI_TARGET_CONFIG_JSON': json.dumps(TARGET | change)}), self.assertRaises(ValueError):
                 load_target()
+
+    def test_initial_setup_requires_explicit_null_cluster_permission(self):
+        target = TARGET | {'cluster_ocid': None}
+        with patch.dict(os.environ, {'OCI_TARGET_CONFIG_JSON': json.dumps(target)}):
+            with self.assertRaises(ValueError):
+                load_target()
+            self.assertEqual(load_target(allow_unprovisioned_cluster=True), target)
+            self.assertNotIn('OCI_CLUSTER_OCID', exports(target))
+
+    def test_initial_setup_does_not_relax_other_target_checks(self):
+        for change in [{'cluster_ocid': ''}, {'cluster_ocid': TARGET['tenancy_ocid']},
+                       {'cluster_ocid': None, 'compartment_ocid': TARGET['tenancy_ocid']}]:
+            with patch.dict(os.environ, {'OCI_TARGET_CONFIG_JSON': json.dumps(TARGET | change)}):
+                with self.assertRaises(ValueError):
+                    load_target(allow_unprovisioned_cluster=True)
+
+    def test_template_matches_private_schema(self):
+        template = json.loads((Path(__file__).resolve().parent.parent / 'docs/oci-target.example.json').read_text())
+        self.assertEqual(set(template), set(TARGET))
+        self.assertIsNone(template['cluster_ocid'])
 
     def test_private_file_permissions_required(self):
         with tempfile.TemporaryDirectory() as directory:

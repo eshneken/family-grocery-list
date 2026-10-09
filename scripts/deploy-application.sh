@@ -72,7 +72,7 @@ kubectl get namespace "$NAMESPACE" >/dev/null
 kubectl --namespace "$NAMESPACE" get secret database >/dev/null
 kubectl --namespace "$NAMESPACE" get secret database-migration >/dev/null
 if [[ "$DEPLOYMENT_MODE" == restore-existing ]]; then
-  kubectl --namespace "$NAMESPACE" get configmap "$BOOTSTRAP_MARKER" >/dev/null || { echo "Restore the database and create the reviewed restore marker before deployment." >&2; exit 1; }
+  kubectl --namespace "$NAMESPACE" get configmap "$BOOTSTRAP_MARKER" >/dev/null || { echo "Existing database initialization marker is required; use initialize only for an empty installation, or validate a backup recovery before recreating the marker." >&2; exit 1; }
 fi
 kubectl --namespace "$NAMESPACE" create configmap grocery-deploy-control --from-literal="mode=$DEPLOYMENT_MODE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 kubectl --namespace "$NAMESPACE" get configmap postgres-ca >/dev/null
@@ -230,7 +230,7 @@ fi
 
 if [[ "$READINESS_MODE" == internal ]]; then
   # Deployment readinessProbe already checked internal ready endpoint. Keep jobs
-  # paused until DNS/TLS and restored data have been accepted.
+  # paused until DNS/TLS and database readiness have been verified.
   echo 'Internal readiness passed; public verification and job enablement remain manual.'
 else
   kubectl --namespace "$NAMESPACE" patch cronjob "$TIMEOUT_CRONJOB" --type=merge --patch='{"spec":{"suspend":false}}' >/dev/null

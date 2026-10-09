@@ -1,25 +1,25 @@
 %%{init: {"theme": "neutral", "flowchart": {"htmlLabels": false, "curve": "linear"}}}%%
 flowchart TD
-  Browser[Household browsers] -->|DNS lookup| DNS[GoDaddy canonical A record]
+  Browser[Household browsers] -->|DNS lookup| DNS[External DNS / application A record]
   Browser -->|HTTPS 443| LB[Flexible LB / 10 Mbps min and max]
   DNS -.->|Reserved public IPv4| LB
-  subgraph OCI[Target tenancy / Ashburn]
+  subgraph OCI[OCI tenancy / configured home region]
     LB -->|TCP 80/443 backends| Caddy
-    subgraph OKE[Basic OKE v1.36.4 / private worker and pods]
+    subgraph OKE[Basic OKE / pinned Kubernetes version / private worker and pods]
       Worker[One ARM64 A1 / 2 OCPU / 12 GB / IMDSv2]
       Caddy[Caddy / TLS and reverse proxy]
       Caddy -->|ClusterIP :3000| App[Next.js / Prisma / household authorization]
       App -->|Verified internal TLS :5432| PG[PostgreSQL 16 StatefulSet / C.UTF-8]
       Caddy -->|caddy subdirectory| PVC[Retained platform-data / shared 50 GiB RWO]
       PG -->|postgres subdirectory| PVC
-      Worker -.->|Hosts all application pods / AD-3| PG
+      Worker -.->|Hosts all application pods / selected AD| PG
       Worker --- Boot[50 GB boot volume]
     end
     Vault[Vault / database credentials and private TLS]
     Vault -->|Materialized Kubernetes Secrets| PG
     State[Private versioned Terraform state bucket]
   end
-  GHA[GitHub Actions / always-free federation] -->|Digest-pinned images and migration Jobs| App
+  GHA[GitHub Actions / always-free federation] -->|Digest-pinned images and schema update Jobs| App
   GHA -->|Guarded Terraform updates| State
   Operator[Operator / kubeconfig / Lens] -->|Authenticated port-forward| PG
   Browser -->|Sign-in| Google[Google OAuth identity]

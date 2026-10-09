@@ -9,7 +9,6 @@ import os
 import json
 from unittest.mock import patch
 from oci_target_fixture import TARGET
-from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location("bootstrap", Path(__file__).with_name("bootstrap-always-free-wif.py"))
 bootstrap = importlib.util.module_from_spec(spec)
@@ -23,13 +22,19 @@ class BootstrapTests(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_only_approved_repository_environment_is_trusted(self):
-        trust = bootstrap.payload("runtime-client", "domain-user")
+        trust = bootstrap.payload("runtime-client", "domain-user", "example/app")
         self.assertEqual(trust["issuer"], "https://token.actions.githubusercontent.com")
         self.assertEqual(trust["oauthClients"], ["runtime-client"])
         self.assertEqual(trust["impersonationServiceUsers"], [{
-            "rule": "sub eq repo:eshneken/family-grocery-list:environment:always-free",
+            "rule": "sub eq repo:example/app:environment:always-free",
             "value": "domain-user",
         }])
+
+    def test_subject_rejects_wildcards_and_invalid_repository(self):
+        for repository, environment in [('example/*', 'always-free'), ('example', 'always-free'),
+                                        ('example/app', '*'), ('example/app', 'prod\\n')]:
+            with self.assertRaises(ValueError):
+                bootstrap.subject(repository, environment)
 
     def test_wrong_profile_and_region_fail_closed(self):
         for content in ["[DEFAULT]\ntenancy=old\n", "[EXAMPLE_OPERATOR]\ntenancy=old\nregion=us-ashburn-1\n",
@@ -42,12 +47,12 @@ class BootstrapTests(unittest.TestCase):
 
     def test_empty_mapping_is_rejected(self):
         with self.assertRaises(ValueError):
-            bootstrap.payload("", "user")
+            bootstrap.payload("", "user", "example/app")
 
     def run_main(self, api_results, compartment=None, service_user=True):
         identity = {"data": compartment or {"compartment-id": TARGET["tenancy_ocid"], "lifecycle-state": "ACTIVE"}}
         users = {"data": {"resources": [{"id": "domain-user", "urn-ietf-params-scim-schemas-oracle-idcs-extension-user-user": {"service-user": service_user}}]}}
-        arguments = ["bootstrap", "--runtime-client-id", "runtime", "--service-user-ocid", "ocid1.user.oc1..test", "--admin-client-id", "admin"]
+        arguments = ["bootstrap", "--repository", "example/app", "--runtime-client-id", "runtime", "--service-user-ocid", "ocid1.user.oc1..test", "--admin-client-id", "admin"]
         output = io.StringIO()
         with patch("sys.argv", arguments), patch.object(bootstrap, "validate_profile"), \
              patch.object(bootstrap, "oci_json", side_effect=[identity, users]), \

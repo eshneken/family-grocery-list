@@ -1,4 +1,4 @@
-"""Check migration cost boundaries and backup recovery/retention behavior."""
+"""Check infrastructure cost boundaries and backup recovery/retention behavior."""
 import importlib.util
 from pathlib import Path
 import unittest
@@ -52,7 +52,7 @@ class SafetyTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'envelope'):
             guard.check(self.plan('oci_containerengine_node_pool', node))
 
-    def test_scheduled_retry_rejects_changes_to_existing_platform(self):
+    def test_capacity_retry_rejects_changes_to_existing_platform(self):
         for typ, action in [('oci_core_vcn', 'create'), ('oci_core_vcn', 'update'),
                             ('oci_containerengine_cluster', 'update'), ('random_password', 'create')]:
             with self.assertRaisesRegex(ValueError, 'retry forbids'):
@@ -69,13 +69,13 @@ class SafetyTests(unittest.TestCase):
 
     def test_wrong_compartment_and_replacement_rejected(self):
         with self.assertRaisesRegex(ValueError, 'another tenancy'):
-            guard.check(self.plan('oci_core_vcn', {'compartment_id': 'legacy'}))
+            guard.check(self.plan('oci_core_vcn', {'compartment_id': 'other-compartment'}))
         with self.assertRaisesRegex(ValueError, 'replacement'):
             guard.check(self.plan('oci_core_vcn', {}, ['delete', 'create']))
 
     def test_backup_keeps_five_and_ignores_partial_archives(self):
         client = Mock()
-        names = ['postgres/2026100' + str(day) + 'T090000Z-' + 'a' * 32 + '.json' for day in range(1, 8)]
+        names = ['postgres/2020010' + str(day) + 'T090000Z-' + 'a' * 32 + '.json' for day in range(1, 8)]
         backup.prune(client, 'namespace', 'bucket', names[::-1] + ['postgres/partial.dump.age', 'unrelated.json'])
         self.assertEqual(client.delete_object.call_count, 4)
         self.assertEqual(client.delete_object.call_args_list[0].args[2], names[0])
@@ -84,7 +84,7 @@ class SafetyTests(unittest.TestCase):
     def test_retention_stops_on_failed_marker_deletion(self):
         client = Mock()
         client.delete_object.side_effect = RuntimeError('simulated denied deletion')
-        names = ['postgres/2026100' + str(day) + 'T090000Z-' + 'a' * 32 + '.json' for day in range(1, 7)]
+        names = ['postgres/2020010' + str(day) + 'T090000Z-' + 'a' * 32 + '.json' for day in range(1, 7)]
         with self.assertRaises(RuntimeError):
             backup.prune(client, 'namespace', 'bucket', names)
         self.assertEqual(client.delete_object.call_count, 1)

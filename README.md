@@ -54,13 +54,13 @@ Production authentication federates with Google and authorizes only active house
 - [`infra/`](infra/README.md) - Terraform for OCI bootstrap resources, the production environment, and the OKE cluster foundation.
 - [`deploy/`](deploy/README.md) - Kubernetes application, migration, and one-time production-bootstrap resources.
 - `diagrams/` - Mermaid sources plus rendered architecture and data-model diagrams.
-- `docs/screenshots/` - Static application preview imagery used by this README.
+- `docs/screenshots/` - Fictional demo imagery used by this README.
 
 ## OCI Architecture
 
 ```mermaid
 flowchart LR
-    Browser[Household browsers] -->|DNS lookup| DNS[GoDaddy DNS]
+    Browser[Household browsers] -->|DNS lookup| DNS[External DNS]
     DNS -->|Manual A record| IP[Reserved OCI public IP]
     Browser -->|HTTPS| LB[OCI load balancer]
     IP --- LB
@@ -69,7 +69,7 @@ flowchart LR
     App --> DB[PostgreSQL pod / shared platform PVC]
 ```
 
-Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at GoDaddy. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The [SVG](diagrams/oci-logical-architecture.svg), [PNG](diagrams/oci-logical-architecture.png), and [editable Excalidraw](diagrams/oci-logical-architecture.excalidraw) show the current deployment. The [backup/recovery diagram](diagrams/oci-backup-recovery.svg) and [architecture/tool-selection reference](docs/oci-deployment-plan.md) cover identities, storage and operations.
+Public DNS is external to the application tenancy. Terraform owns the reserved IP; the hostname’s A record is updated manually at your DNS provider. The full current architecture source is available as [Mermaid](diagrams/oci-logical-architecture.mmd). The [SVG](diagrams/oci-logical-architecture.svg), [PNG](diagrams/oci-logical-architecture.png), and [editable Excalidraw](diagrams/oci-logical-architecture.excalidraw) show the current deployment. The [backup/recovery diagram](diagrams/oci-backup-recovery.svg) and [architecture/tool-selection reference](docs/oci-architecture.md) cover identities, storage and operations.
 
 ## Logical Data Model
 
@@ -79,8 +79,10 @@ The diagram follows the production Prisma model and shows entity cardinalities, 
 
 ## Application Preview
 
+The preview uses fictional demo identities and images, not production data.
+
 <p align="center">
-  <img src="docs/screenshots/family-grocery-mobile.png" alt="Family Grocery mobile list experience" width="420">
+  <img src="docs/screenshots/family-grocery-mobile.png" alt="Family Grocery demo list experience" width="420">
 </p>
 
 ## Development Workflow
@@ -126,9 +128,9 @@ Every non-`master` branch push runs CI without production credentials. GitHub re
 
 ## Production Infrastructure
 
-The migration branch targets OCI Always Free: Basic OKE, one 2-OCPU/12 GB ARM A1 worker, PostgreSQL in Kubernetes, a shared 50 GiB Caddy/database PVC, and one fixed 10/10 Mbps flexible load balancer. GoDaddy DNS remains manual.
+The OCI implementation uses Basic OKE, one 2-OCPU/12 GB ARM64 A1 worker, PostgreSQL in Kubernetes, a shared 50 GiB Caddy/database PVC and one flexible load balancer fixed at 10/10 Mbps. Public DNS is managed externally.
 
-Follow the [execution checkpoints](docs/oci-always-free-checkpoints.md) and [operator runbook](docs/oci-always-free-operations.md). Production cutover and a real shopping run passed October 8, 2026. The operator explicitly waived the seven-day hold and first scheduled-backup checkpoint after a fresh backup/scratch restore. Old foundation/platform/state storage and dedicated deployment access were retired locally on October 8; the old Vault/key are pending OCI deletion on November 7. The migration is merged into `master`; application delivery is enabled in `restore-existing` mode. Hourly [backup alerts](docs/backup-alerts.md) already run from `master`. The new roots enforce the new tenancy/compartment, use separate state, and do not support automatic destructive resets.
+Follow the [setup guide](docs/oci-setup.md), [architecture reference](docs/oci-architecture.md) and [operator runbook](docs/oci-operations.md). Private target configuration supplies tenancy, compartment, namespace, profiles, resource IDs and application hostname. Terraform guards enforce the selected target and bounded resources; they do not guarantee billing eligibility. Verify the account's current free-tier entitlements and tenancy-wide usage before provisioning. Hourly [backup alerts](docs/backup-alerts.md) complement encrypted daily backups and restore drills.
 
 A local administrator prepares tenancy backup IAM and the state/Vault bootstrap. The manual **OCI Always Free infrastructure** workflow plans/applies the platform and cluster foundation separately after review. Full details are in [infra/README.md](infra/README.md).
 
@@ -141,7 +143,7 @@ Successful commits on feature branches stop after CI. Branch protection requires
 1. Builds and attests `linux/amd64` and `linux/arm64` images in GHCR.
 2. Selects the immutable image digest rather than a mutable tag.
 3. Runs checked-in Prisma migrations from an OKE Job against private PostgreSQL.
-4. In `restore-existing` mode, requires the reviewed restore marker and existing household data; skips initialization. `initialize` is reserved for an explicitly empty new database.
+4. In `restore-existing` mode, requires the initialization marker and existing household data; skips initialization. `initialize` is reserved for an explicitly empty new database.
 5. Rolls out the application, waits for database-aware readiness, and tests the public HTTPS endpoint.
 
 Later releases retain production data, skip bootstrap, apply only pending migrations, and deploy the new image. Failed migrations stop before rollout. Failed readiness or smoke tests restore the previous application image; database migrations are never automatically reversed.
@@ -150,11 +152,11 @@ See [deploy/README.md](deploy/README.md) for required GitHub secrets, the one-ti
 
 ## Documentation
 
-Current references: [architecture and tool choices](docs/oci-deployment-plan.md), [operator runbook](docs/oci-always-free-operations.md), [infrastructure roots](infra/README.md), and [application delivery](deploy/README.md). Historical records: [migration design](docs/oci-always-free-design.md), [preflight](docs/oci-always-free-preflight.md), [execution checkpoints](docs/oci-always-free-checkpoints.md), and [Google authentication implementation](docs/google-oidc-auth-implementation-plan.md). Feature behavior: [shopping timeout](docs/shopping-session-timeout.md) and [Quick Add](docs/quick-add-autocomplete-design-plan.md).
+Deployment: [setup](docs/oci-setup.md), [architecture and tool choices](docs/oci-architecture.md), [operator runbook](docs/oci-operations.md), [backup alerts](docs/backup-alerts.md), [infrastructure roots](infra/README.md), and [application delivery](deploy/README.md). Feature references: [Google authentication](docs/google-oidc-auth-implementation-plan.md), [shopping timeout](docs/shopping-session-timeout.md) and [Quick Add](docs/quick-add-autocomplete-design-plan.md).
 
 ## Administrative Tasks
 
-Production PostgreSQL is a Kubernetes StatefulSet with a private ClusterIP service. Use the distinct operator kubeconfig and authenticated `kubectl port-forward`, with the database CA and hostname verification. Follow [Database administration](docs/oci-always-free-operations.md#database-administration); no managed PostgreSQL or database Bastion is provisioned. Keep owner credentials private.
+Production PostgreSQL is a Kubernetes StatefulSet with a private ClusterIP service. Use the distinct operator kubeconfig and authenticated `kubectl port-forward`, with the database CA and hostname verification. Follow [Database administration](docs/oci-operations.md#database-administration); no managed PostgreSQL or database Bastion is provisioned. Keep owner credentials private.
 
 ## Prerequisites
 
@@ -373,7 +375,7 @@ The seed script deletes existing app data before inserting the local fixture hou
 For the first production household, run the non-destructive bootstrap after migrations:
 
 ```bash
-npm run db:bootstrap -- --admin-email family-admin@gmail.com --household-name "Shneken Family"
+npm run db:bootstrap -- --admin-email "$INITIAL_ADMIN_EMAIL" --household-name "$INITIAL_HOUSEHOLD_NAME"
 ```
 
 An identical rerun is a no-op. A conflicting administrator or household fails without changing data.

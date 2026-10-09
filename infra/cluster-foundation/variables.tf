@@ -7,7 +7,7 @@ variable "approved_target" {
 variable "tenancy_ocid" {
   validation {
     condition     = var.tenancy_ocid == var.approved_target.tenancy_ocid
-    error_message = "Inputs must match the approved private target; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse state from another target."
   }
   type      = string
   sensitive = true
@@ -16,7 +16,7 @@ variable "tenancy_ocid" {
 variable "region" {
   validation {
     condition     = var.region == "us-ashburn-1"
-    error_message = "Inputs must match the approved private target; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse state from another target."
   }
   type = string
 }
@@ -30,7 +30,7 @@ variable "oci_auth" {
 variable "compartment_ocid" {
   validation {
     condition     = var.compartment_ocid == var.approved_target.compartment_ocid
-    error_message = "Inputs must match the approved private target; do not reuse legacy state."
+    error_message = "Inputs must match the approved private target; do not reuse state from another target."
   }
   description = "Compartment containing the CCM-created public load balancer."
   type        = string

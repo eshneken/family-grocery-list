@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       check_backup_health:
-        description: Read-only rehearsal backup check (permits suspended schedule)
+        description: Read-only production backup-health check
         type: boolean
         default: false
 
@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   verify:
-    if: github.ref == 'refs/heads/codex/oci-always-free' || github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/master'
     name: Exchange GitHub OIDC token for OCI credentials
     runs-on: ubuntu-latest
     environment: always-free
@@ -50,7 +50,7 @@ jobs:
             echo 'Approved private target identity verified.'
             echo 'GitHub token exchange and namespace discovery passed. No infrastructure was provisioned.'
           } >> "$GITHUB_STEP_SUMMARY"
-      - name: Verify rehearsal backup health
+      - name: Verify backup health
         if: inputs.check_backup_health
         shell: bash
         run: |
@@ -63,4 +63,4 @@ jobs:
           context="$(kubectl --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" config current-context)"
           python3 -B scripts/check-backup-health.py \
             --kubeconfig "$RUNNER_TEMP/oke-kubeconfig" --context "$context" \
-            --oci-profile DEFAULT --oci-auth security_token --allow-suspended
+            --oci-profile DEFAULT --oci-auth security_token

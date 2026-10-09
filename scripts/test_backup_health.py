@@ -11,10 +11,10 @@ from oci_target_fixture import TARGET
 spec = importlib.util.spec_from_file_location("monitor", pathlib.Path(__file__).with_name("check-backup-health.py"))
 monitor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(monitor)
-NOW = datetime.datetime(2026, 10, 8, 14, tzinfo=datetime.timezone.utc)
+NOW = datetime.datetime(2020, 1, 15, 14, tzinfo=datetime.timezone.utc)
 
 
-def objects(timestamp="20261008T090000Z", created=None):
+def objects(timestamp="20200115T090000Z", created=None):
     base = "postgres/" + timestamp + "-" + "a" * 32
     manifest = {"name": base + ".json"}
     if created:
@@ -42,10 +42,10 @@ class Health(unittest.TestCase):
         self.assertTrue(monitor.evaluate(objects(), [], NOW)["healthy"])
 
     def test_stale_backup(self):
-        self.assertFalse(monitor.evaluate(objects("20261007T070000Z"), [], NOW)["healthy"])
+        self.assertFalse(monitor.evaluate(objects("20200114T070000Z"), [], NOW)["healthy"])
 
     def test_future_timestamp(self):
-        self.assertFalse(monitor.evaluate(objects("20261009T090000Z"), [], NOW)["healthy"])
+        self.assertFalse(monitor.evaluate(objects("20200116T090000Z"), [], NOW)["healthy"])
 
     def test_missing_archive(self):
         self.assertFalse(monitor.evaluate(objects()[:1], [], NOW)["healthy"])
@@ -56,32 +56,32 @@ class Health(unittest.TestCase):
         self.assertFalse(monitor.evaluate(data, [], NOW)["healthy"])
 
     def test_failure_after_success(self):
-        jobs = [job("2026-10-08T10:00:00Z", failed=True)]
+        jobs = [job("2020-01-15T10:00:00Z", failed=True)]
         self.assertFalse(monitor.evaluate(objects(), jobs, NOW)["healthy"])
 
     def test_prune_failure_after_own_upload(self):
-        jobs = [job("2026-10-08T09:00:00Z", failed=True, transition="2026-10-08T09:02:00Z")]
-        data = objects(created="2026-10-08T09:01:00Z")
+        jobs = [job("2020-01-15T09:00:00Z", failed=True, transition="2020-01-15T09:02:00Z")]
+        data = objects(created="2020-01-15T09:01:00Z")
         self.assertFalse(monitor.evaluate(data, jobs, NOW)["healthy"])
         # A later fully successful upload clears the earlier failure.
-        data = objects("20261008T100000Z", created="2026-10-08T10:01:00Z")
+        data = objects("20200115T100000Z", created="2020-01-15T10:01:00Z")
         self.assertTrue(monitor.evaluate(data, jobs, NOW)["healthy"])
 
     def test_failure_recovered_by_success(self):
-        jobs = [job("2026-10-08T08:00:00Z", failed=True)]
+        jobs = [job("2020-01-15T08:00:00Z", failed=True)]
         self.assertTrue(monitor.evaluate(objects(), jobs, NOW)["healthy"])
 
     def test_job_stuck(self):
-        jobs = [job("2026-10-08T13:00:00Z", active=True)]
+        jobs = [job("2020-01-15T13:00:00Z", active=True)]
         self.assertFalse(monitor.evaluate(objects(), jobs, NOW)["healthy"])
 
     def test_other_job_ignored(self):
-        other = job("2026-10-08T10:00:00Z", failed=True)
+        other = job("2020-01-15T10:00:00Z", failed=True)
         other["metadata"]["labels"]["task"] = "unrelated"
         self.assertTrue(monitor.evaluate(objects(), [other], NOW)["healthy"])
 
     def test_retention_limit(self):
-        data = sum([objects(f"20261008T0{hour}0000Z") for hour in range(1, 7)], [])
+        data = sum([objects(f"20200115T0{hour}0000Z") for hour in range(1, 7)], [])
         self.assertFalse(monitor.evaluate(data, [], NOW)["healthy"])
 
     def test_no_complete_backups(self):
