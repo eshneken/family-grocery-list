@@ -57,7 +57,7 @@ describe("shopping suggestions", () => {
     expect(dressing.storeId).toBe(giant.id);
   });
 
-  it("uses successful outcomes only and chooses the newest still-enabled historical store", async () => {
+  it("uses successful outcomes for ranking but never infers a store from shopping history", async () => {
     const { testHousehold, shopper, giant } = await setupSuggestionHousehold("autocomplete-outcomes");
     const wholeFoods = testHousehold.stores.find((store) => store.name === "Whole Foods")!;
     await prisma.store.update({ where: { id: wholeFoods.id }, data: { enabled: false } });
@@ -104,7 +104,7 @@ describe("shopping suggestions", () => {
 
     expect(candidates.find((candidate) => candidate.displayName === "Favorite Tea")).toMatchObject({
       score: 19,
-      storeId: giant.id
+      storeId: null
     });
     expect(candidates.map((candidate) => candidate.displayName)).not.toContain("rejected item");
     expect(candidates.map((candidate) => candidate.displayName)).not.toContain("carried_forward item");

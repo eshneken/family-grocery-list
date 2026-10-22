@@ -24,7 +24,6 @@ export type SuggestionListItem = {
 
 type CandidateAccumulator = AutocompleteCandidate & {
   latestTripIndex: number;
-  defaultStoreId: string | null;
 };
 
 function normalizedKey(value: string) {
@@ -64,6 +63,13 @@ function eligibleStore(storeId: string | null | undefined, enabledStoreIds?: Set
   return enabledStoreIds && !enabledStoreIds.has(storeId) ? null : storeId;
 }
 
+/** Only an explicit, still-enabled catalog preference can restrict future requests. */
+function preferredStore(item: { anyStore: boolean; defaultStoreId: string | null; defaultStore: { enabled: boolean } | null } | null, enabledStoreIds?: Set<string>) {
+  return item && !item.anyStore && item.defaultStore?.enabled
+    ? eligibleStore(item.defaultStoreId, enabledStoreIds)
+    : null;
+}
+
 /**
  * Builds the bounded, server-ranked candidate pool used by Quick Add autocomplete.
  * Passing the page's current items avoids querying the collecting list a second time.
@@ -88,6 +94,7 @@ export async function getAutocompleteCandidates(
               include: {
                 groceryItem: {
                   include: {
+                    defaultStore: true,
                     aliases: { orderBy: { alias: "asc" }, take: AUTOCOMPLETE_ALIAS_LIMIT }
                   }
                 }
@@ -101,7 +108,7 @@ export async function getAutocompleteCandidates(
     }),
     prisma.groceryItem.findMany({
       where: { householdId },
-      include: { aliases: { orderBy: { alias: "asc" }, take: AUTOCOMPLETE_ALIAS_LIMIT } },
+      include: { defaultStore: true, aliases: { orderBy: { alias: "asc" }, take: AUTOCOMPLETE_ALIAS_LIMIT } },
       orderBy: [{ recurringStaple: "desc" }, { canonicalName: "asc" }],
       take: AUTOCOMPLETE_CANDIDATE_LIMIT
     }),
@@ -122,18 +129,15 @@ export async function getAutocompleteCandidates(
       if (alreadyOnList.has(key) || alreadyOnList.has(normalizedKey(displayName))) return;
 
       const existing = candidates.get(key);
-      const historicalStore = eligibleStore(item.storeId ?? trip.storeId, enabledStoreIds);
       if (existing) {
         existing.score += weight;
-        if (!existing.storeId && historicalStore) existing.storeId = historicalStore;
         return;
       }
 
       candidates.set(key, {
         displayName,
         category: item.category,
-        storeId: historicalStore,
-        defaultStoreId: eligibleStore(canonical?.defaultStoreId, enabledStoreIds),
+        storeId: preferredStore(canonical, enabledStoreIds),
         groceryItemId: item.groceryItemId,
         score: weight,
         latestTripIndex: tripIndex,
@@ -155,7 +159,7 @@ export async function getAutocompleteCandidates(
         existing.category = item.category;
         existing.groceryItemId = item.id;
       }
-      existing.defaultStoreId ??= eligibleStore(item.defaultStoreId, enabledStoreIds);
+      existing.storeId = preferredStore(item, enabledStoreIds);
       existing.matchTerms = uniqueTerms([...existing.matchTerms, ...matchTerms]);
       return;
     }
@@ -163,8 +167,7 @@ export async function getAutocompleteCandidates(
     candidates.set(key, {
       displayName: item.canonicalName,
       category: item.category,
-      storeId: null,
-      defaultStoreId: eligibleStore(item.defaultStoreId, enabledStoreIds),
+      storeId: preferredStore(item, enabledStoreIds),
       groceryItemId: item.id,
       score: item.recurringStaple ? 0 : -1,
       latestTripIndex: Number.POSITIVE_INFINITY,
@@ -183,7 +186,7 @@ export async function getAutocompleteCandidates(
     .map((candidate) => ({
       displayName: candidate.displayName,
       category: candidate.category,
-      storeId: candidate.storeId ?? candidate.defaultStoreId,
+      storeId: candidate.storeId,
       groceryItemId: candidate.groceryItemId,
       score: candidate.score,
       matchTerms: candidate.matchTerms
@@ -201,6 +204,7 @@ export async function getCatalogSuggestions(householdId: string, currentListId?:
   const [items, alreadyOnList] = await Promise.all([
     prisma.groceryItem.findMany({
       where: { householdId },
+      include: { defaultStore: true },
       orderBy: [{ recurringStaple: "desc" }, { canonicalName: "asc" }],
       take: 16
     }),
@@ -212,7 +216,7 @@ export async function getCatalogSuggestions(householdId: string, currentListId?:
     .map((item) => ({
       displayName: item.canonicalName,
       category: item.category,
-      storeId: item.defaultStoreId,
+      storeId: preferredStore(item),
       groceryItemId: item.id,
       score: item.recurringStaple ? 10 : 1
     }))

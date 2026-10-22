@@ -13,7 +13,7 @@ type GrocerySectionProps = {
     notes?: string | null;
     substituteText?: string | null;
     store?: { name: string } | null;
-    groceryItem?: { recurringStaple: boolean } | null;
+    groceryItem?: { recurringStaple: boolean; anyStore?: boolean; defaultStoreId?: string | null } | null;
     requestedBy?: { user?: { firstName: string; imageUrl: string | null } | null; approvedEmail: string };
   }>;
   shopperActions?: boolean;
@@ -41,6 +41,7 @@ export function GrocerySection({ title, items, shopperActions, stores = [] }: Gr
             substituteText={item.substituteText}
             storeName={item.store?.name}
             recurringStaple={item.groceryItem?.recurringStaple ?? false}
+            savedStoreId={item.groceryItem?.anyStore === false ? item.groceryItem.defaultStoreId ?? null : null}
             requesterName={item.requestedBy?.user?.firstName ?? item.requestedBy?.approvedEmail}
             requesterImage={item.requestedBy?.user?.imageUrl}
             shopperActions={shopperActions}

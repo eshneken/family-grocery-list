@@ -1,5 +1,7 @@
 # Family Grocery List
 
+Quick Add defaults to Any Store unless an item has a saved store preference. See [Store preferences](docs/store-preferences.md) to save or clear one in the request editor.
+
 Shopping runs automatically complete after approximately four hours, with unfinished requests moved to the next list. See [Shopping session timeout](docs/shopping-session-timeout.md) for timing, deployment, and testing details.
 
 Family Grocery List is a responsive web app for collecting, organizing, shopping, and reviewing a household grocery list. It is built for a shared family workflow where requestors add items, shoppers run store-specific trips, and admins manage household access and store configuration.

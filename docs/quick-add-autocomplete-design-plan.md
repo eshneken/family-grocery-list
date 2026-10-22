@@ -10,7 +10,7 @@ Add fast, mobile-friendly autocomplete to the Current List Quick Add field using
 - Match case-insensitively at the beginning of any word. Preserve the stored capitalization in displayed and submitted results.
 - Rank by recency-weighted frequency.
 - Load at most 40 candidates and display at most 6 matches.
-- Selecting a result fills its canonical item name and most recently used enabled store, but does not submit the form.
+- Selecting a result fills its canonical item name and explicit saved enabled store (otherwise Any Store), but does not submit the form. A manual store choice always takes priority. See [Store preferences](store-preferences.md) for the remember/clear editor behavior added after the initial release.
 - Use only `purchased` and `substituted` outcomes as historical evidence. Moved, cancelled, removed, and pending items do not affect ranking.
 - Open autocomplete after one typed character. Keep Common Suggestions as the empty-input discovery experience.
 - Search canonical names and saved aliases. Display and submit the canonical name, and collapse exact case-insensitive duplicates.
@@ -78,8 +78,8 @@ Data rules:
 4. Deduplicate catalog-backed entries by `groceryItemId`; deduplicate free-form entries by normalized display name.
 5. For a catalog-backed result, use its canonical name as `displayName` and include the canonical name plus all aliases in `matchTerms`.
 6. For a free-form historical result, use its preserved display name as both `displayName` and its sole match term.
-7. Since trips are processed newest first, retain the store from the newest qualifying occurrence. A catalog default is the fallback when there is no qualifying historical store.
-8. Pass the enabled store IDs into candidate construction, or validate them before updating the form. A deleted or disabled historical store must not replace the user's current selection.
+7. Use trips only for item ranking. Obtain future store restrictions solely from a catalog record with `anyStore=false` and a saved default store; never infer a preference from a historical request or trip destination.
+8. Validate the saved store's enabled state and supplied enabled store IDs. Missing/disabled saved stores resolve to Any Store; manual form selections are never overridden.
 
 ### Ranking
 
@@ -111,7 +111,7 @@ Follow the WAI-ARIA editable combobox/listbox pattern: the input owns `role="com
 1. `src/features/shopping/suggestions.ts`
    - Add the bounded merged candidate builder.
    - Change historical eligibility to purchased/substituted only.
-   - Include aliases and most-recent-store metadata.
+   - Include aliases and explicit saved-store preferences, not purchase destinations.
    - Keep Common Suggestions capped at its current visible size while sharing the candidate logic where practical.
 2. `src/features/shopping/autocomplete.ts`
    - Add pure normalization, word-prefix matching, deduplication, and client-result ranking helpers. Keeping these functions independent of React and Prisma makes edge cases inexpensive to unit test.
@@ -137,7 +137,7 @@ Component tests
   popup state | keyboard | touch selection | store fill | free-form fallback | ARIA
             |
 Database/service tests
-  bounded history | eligible outcomes | aliases | recent store | exclusions
+  bounded history | eligible outcomes | aliases | saved store | exclusions
             |
 Playwright at iPhone viewport
   type -> choose -> verify fields -> submit -> verify list
@@ -162,7 +162,7 @@ Playwright at iPhone viewport
 - Include successful free-form historical items.
 - Deduplicate by catalog ID and normalized free-form name.
 - Exclude items already on the current list using both identity paths.
-- Choose the newest qualifying store, fall back to the catalog default, and return no selectable store when it is disabled or deleted.
+- Use only explicit saved catalog preferences, otherwise Any Store, including when the saved store is disabled or deleted.
 - Isolate all data by household.
 - Return catalog fallbacks when there is no completed history and return an empty array safely when neither source has data.
 
@@ -173,7 +173,7 @@ Playwright at iPhone viewport
 - Keyboard and touch selection fill the preserved-case name and expected store without submitting.
 - Enter selects an active result; Enter with no active result retains normal form submission behavior.
 - Manual store changes override the suggested value.
-- Missing/disabled stores leave the current store unchanged.
+- Missing/disabled saved stores resolve to Any Store unless the user has manually selected a store.
 - Successful submission clears the item and store controls; failed submission keeps the entered values.
 - Combobox/listbox roles, expanded state, active descendant, labels, and focus behavior are correct.
 - At an iPhone viewport, the popup stays within the screen, rows remain readable, and Safari's 16px input font prevents focus zoom.
@@ -198,7 +198,7 @@ Run `npm run lint`, `npm run typecheck`, `npm run test:coverage`, and `npm run e
 | JavaScript fails or hydration is delayed | The standard item/store form remains usable and submits through the existing server action. |
 | Candidate becomes stale while page stays open | Submission is authoritative; the next action refresh/page render rebuilds candidates. |
 | Another household member adds the same item | Existing server-side list behavior remains authoritative; autocomplete does not bypass it. |
-| Historical store is disabled/deleted | Do not change the current store selection. |
+| Saved store is disabled/deleted | Use Any Store unless the user has manually selected a store. |
 | Alias or catalog changes after render | The current snapshot is safe; the next render reflects the change. |
 | No match exists | Keep the user's text and allow normal free-form submission. |
 | Add item submission fails | Keep the entered item and store values available for correction or retry. |

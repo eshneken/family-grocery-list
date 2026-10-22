@@ -111,6 +111,7 @@ export async function updateListItem(input: {
   category: string;
   storeId?: string | null;
   recurringStaple: boolean;
+  rememberStore?: boolean;
 }) {
   return prisma.$transaction(async (tx) => {
     await lockShoppingHousehold(tx, input.householdId);
@@ -141,12 +142,19 @@ export async function updateListItem(input: {
     });
     if (duplicate) throw new Error("That item is already on this list for the same store.");
 
+    // An omitted preference preserves existing catalog settings (including older forms).
+    // A request's destination alone must never create a permanent store binding.
+    const storePreference = input.rememberStore === undefined ? {} : {
+      defaultStoreId: input.rememberStore ? storeId : null,
+      anyStore: !input.rememberStore || storeId === null
+    };
     const groceryItem = item.groceryItemId
       ? await tx.groceryItem.update({
           where: { id: item.groceryItemId },
           data: {
             category: input.category,
-            recurringStaple: input.recurringStaple
+            recurringStaple: input.recurringStaple,
+            ...storePreference
           }
         })
       : await tx.groceryItem.upsert({
@@ -158,16 +166,14 @@ export async function updateListItem(input: {
           },
           update: {
             category: input.category,
-            defaultStoreId: storeId,
-            anyStore: storeId === null,
+            ...storePreference,
             recurringStaple: input.recurringStaple
           },
           create: {
             householdId: input.householdId,
             canonicalName: displayName,
             category: input.category,
-            defaultStoreId: storeId,
-            anyStore: storeId === null,
+            ...storePreference,
             recurringStaple: input.recurringStaple
           }
         });

@@ -20,6 +20,7 @@ type ItemRowProps = {
   notes?: string | null;
   substituteText?: string | null;
   recurringStaple?: boolean;
+  savedStoreId?: string | null;
   shopperActions?: boolean;
 };
 
@@ -57,6 +58,7 @@ export function ItemRow(props: ItemRowProps) {
         <StatusBadge status={props.status} />
         {!props.shopperActions && props.status === "pending" ? (
           <RequestItemEditor
+            savedStoreId={props.savedStoreId ?? null}
             id={props.id}
             displayName={props.displayName}
             category={props.category}
