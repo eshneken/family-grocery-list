@@ -4,7 +4,7 @@ Creates Basic OKE with one managed ARM64 A1 worker (2 OCPUs / 12 GB, 50 GB boot)
 
 Select the supported Kubernetes version and matching ARM64 image from regional OKE options and pin them in private configuration. IMDSv1 is disabled at launch. The backup defined tag applies to the actual worker; confirm its shape, instance options, tag and boot volume after creation.
 
-The default API source CIDR is `0.0.0.0/0`. Configure `operator_api_cidrs` for your requirements and verify operator and CI reachability. TLS, IAM and RBAC remain required. Worker/kubelet, NodePorts and PostgreSQL have no public ingress.
+Set required `admin_cidrs` through the private `OCI_ADMIN_CIDRS` GitHub environment variable (or the corresponding local Terraform input). No public default is supplied; `/0` is rejected. The API and any enabled Bastion use this allowlist; GitHub jobs temporarily allow only their runner `/32` on API TCP 6443 and remove it afterward. TLS, IAM and RBAC remain required. Worker SSH/kubelet, NodePorts and PostgreSQL have no public ingress. For IP changes without rebuilding the environment, use the [network-access maintenance procedure](../../docs/oci-operations.md#administrative-network-access).
 
 Copy the safe example into an ignored variables file and use the isolated helper. Review every plan before applying. See [setup](../../docs/oci-setup.md) and [operations](../../docs/oci-operations.md).
 
