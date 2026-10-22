@@ -116,7 +116,13 @@ jobs:
       - name: Apply migrations to CI PostgreSQL
         run: npm run db:migrate:deploy
       - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium webkit
+        run: |
+          # Azure's Ubuntu mirror downloaded OS packages at ~40 KB/s in CI.
+          # Use Ubuntu's signed archive over HTTPS for browser dependencies.
+          if [[ -f /etc/apt/apt-mirrors.txt ]]; then
+            sudo sed -i 's|http://azure.archive.ubuntu.com/ubuntu|https://archive.ubuntu.com/ubuntu|g' /etc/apt/apt-mirrors.txt
+          fi
+          npx playwright install --with-deps chromium webkit
       - name: Run mock-auth browser journeys
         run: npm run e2e
       - name: Run production Google-auth shell journey

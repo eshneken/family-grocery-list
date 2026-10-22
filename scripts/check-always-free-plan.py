@@ -40,6 +40,23 @@ def check(plan, nodepool_retry_only=False, target=None, network_access_only=Fals
             if (after.get('direction'), after.get('protocol'), after.get('source_type'),
                 ports.get('min'), ports.get('max')) != ('INGRESS', '6', 'CIDR_BLOCK', 6443, 6443) or after.get('source') not in allowed:
                 raise ValueError('API ingress must match the reviewed administrative CIDRs on TCP 6443')
+        if resource['address'] == 'oci_core_security_list.bastion' and after:
+            rules = after.get('egress_security_rules', [])
+            rule = rules[0] if len(rules) == 1 else {}
+            ports = rule.get('tcp_options', [{}])[0]
+            worker_cidr = plan.get('variables', {}).get('worker_subnet_cidr', {}).get('value')
+            if (after.get('ingress_security_rules') or len(rules) != 1 or not worker_cidr
+                    or (rule.get('protocol'), rule.get('destination_type'), rule.get('destination'),
+                        rule.get('stateless'), ports.get('min'), ports.get('max'))
+                    != ('6', 'CIDR_BLOCK', worker_cidr, False, 22, 22)):
+                raise ValueError('Bastion security list must allow only stateful worker SSH egress and no ingress')
+        if resource['address'] == 'oci_core_network_security_group_security_rule.workers_ssh_from_bastion' and after:
+            ports = after.get('tcp_options', [{}])[0].get('destination_port_range', [{}])[0]
+            bastion_cidr = plan.get('variables', {}).get('bastion_subnet_cidr', {}).get('value')
+            if (not bastion_cidr or (after.get('direction'), after.get('protocol'), after.get('source_type'),
+                    after.get('source'), after.get('stateless'), ports.get('min'), ports.get('max'))
+                    != ('INGRESS', '6', 'CIDR_BLOCK', bastion_cidr, False, 22, 22)):
+                raise ValueError('Worker SSH ingress must be stateful TCP 22 from the Bastion subnet only')
         if nodepool_retry_only and change['actions'] != ['no-op']:
             if not (resource['address'] == 'oci_containerengine_node_pool.grocery'
                     and typ == 'oci_containerengine_node_pool' and change['actions'] == ['create']):

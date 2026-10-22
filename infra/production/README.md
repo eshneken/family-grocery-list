@@ -8,6 +8,8 @@ Set required `admin_cidrs` through the private `OCI_ADMIN_CIDRS` GitHub environm
 
 Copy the safe example into an ignored variables file and use the isolated helper. Review every plan before applying. See [setup](../../docs/oci-setup.md) and [operations](../../docs/oci-operations.md).
 
+The dedicated Bastion subnet has stateful egress to the private worker subnet on TCP 22, paired with worker NSG ingress from the Bastion subnet CIDR on TCP 22. This prepares the SSH path before Bastion is enabled; reserve that subnet for trusted Bastion endpoints. Client CIDR authorization, a time-limited session, and worker SSH authentication remain required. The other subnets retain their empty shared security list and NSG-managed rules.
+
 ## External DNS setup
 
 After foundation creates the flexible load balancer, read the `reserved_public_ip` output privately. At your external DNS provider, point the configured application hostname's A record to that address. Avoid an AAAA record unless IPv6 delivery is configured and verified. Terraform manages no public DNS zone or record.

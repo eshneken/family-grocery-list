@@ -97,6 +97,50 @@ class NetworkAccessTests(unittest.TestCase):
                     access.open_access(path)
             self.assertEqual(json.loads(path.read_text())['nsg'], 'approved')
 
+    def test_bastion_security_list_has_only_worker_ssh_egress(self):
+        rule = {'protocol': '6', 'destination_type': 'CIDR_BLOCK', 'destination': '10.40.10.0/24',
+                'stateless': False, 'tcp_options': [{'min': 22, 'max': 22}]}
+        after = {'ingress_security_rules': [], 'egress_security_rules': [rule]}
+        plan = {'variables': {'worker_subnet_cidr': {'value': '10.40.10.0/24'}},
+                'resource_changes': [{'mode': 'managed', 'type': 'oci_core_security_list',
+                 'address': 'oci_core_security_list.bastion',
+                 'change': {'actions': ['create'], 'after': after}}]}
+        guard.check(plan, target=TARGET)
+        for field, value in [('destination', '0.0.0.0/0'), ('protocol', 'all'), ('stateless', True),
+                             ('tcp_options', [{'min': 22, 'max': 65535}])]:
+            saved = rule[field]
+            rule[field] = value
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, 'SSH egress'):
+                guard.check(plan, target=TARGET)
+            rule[field] = saved
+        after['ingress_security_rules'] = [{'source': '0.0.0.0/0'}]
+        with self.assertRaises(ValueError):
+            guard.check(plan, target=TARGET)
+
+    def test_worker_ssh_must_come_from_bastion_subnet(self):
+        after = {'direction': 'INGRESS', 'protocol': '6', 'source_type': 'CIDR_BLOCK',
+                 'source': '10.40.40.0/28', 'stateless': False,
+                 'tcp_options': [{'destination_port_range': [{'min': 22, 'max': 22}]}]}
+        plan = {'variables': {'bastion_subnet_cidr': {'value': '10.40.40.0/28'}},
+                'resource_changes': [{'mode': 'managed', 'type': 'oci_core_network_security_group_security_rule',
+                 'address': 'oci_core_network_security_group_security_rule.workers_ssh_from_bastion',
+                 'change': {'actions': ['create'], 'after': after}}]}
+        guard.check(plan, target=TARGET)
+        after['source'] = '0.0.0.0/0'
+        with self.assertRaisesRegex(ValueError, 'Bastion subnet only'):
+            guard.check(plan, target=TARGET)
+        after['source'] = '10.40.40.0/28'
+        after['tcp_options'][0]['destination_port_range'][0]['max'] = 6443
+        with self.assertRaises(ValueError):
+            guard.check(plan, target=TARGET)
+
+    def test_cidr_maintenance_cannot_create_bastion_ssh_path(self):
+        plan = {'resource_changes': [{'mode': 'managed', 'type': 'oci_core_security_list',
+                'address': 'oci_core_security_list.bastion',
+                'change': {'actions': ['create'], 'after': {}}}]}
+        with self.assertRaisesRegex(ValueError, 'unrelated'):
+            guard.check(plan, target=TARGET, network_access_only=True)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -2,7 +2,8 @@ resource "oci_core_security_list" "nsg_only" {
   compartment_id = var.compartment_ocid
   vcn_id         = oci_core_vcn.grocery.id
   display_name   = "grocery-nsg-only"
-  # No default SSH/API ingress. NSGs own all ingress and egress rules.
+  # No default SSH/API ingress. Application subnets use NSGs; Bastion has
+  # a dedicated security list for its narrowly scoped outbound SSH path.
 }
 
 resource "oci_core_vcn" "grocery" {
@@ -115,7 +116,7 @@ resource "oci_core_subnet" "pods" {
 }
 
 resource "oci_core_subnet" "bastion" {
-  security_list_ids          = [oci_core_security_list.nsg_only.id]
+  security_list_ids          = [oci_core_security_list.bastion.id]
   compartment_id             = var.compartment_ocid
   vcn_id                     = oci_core_vcn.grocery.id
   cidr_block                 = var.bastion_subnet_cidr
