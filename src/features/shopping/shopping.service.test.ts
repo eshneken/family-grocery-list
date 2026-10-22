@@ -141,6 +141,7 @@ describe("shopping service database behavior", () => {
         displayName: "Bananas",
         category: "Produce",
         storeId: wholeFoods.id,
+        rememberStore: true,
         recurringStaple: true
       });
 

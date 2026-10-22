@@ -38,6 +38,31 @@ function setup(overrides = candidates) {
 }
 
 describe("QuickAddCombobox", () => {
+  it.each(["whole-foods", ""])("preserves a manual store selection of %s even for a store-specific suggestion", (selected) => {
+    const { input, store } = setup();
+    fireEvent.change(store, { target: { value: selected } });
+    fireEvent.change(input, { target: { value: "ging" } });
+    fireEvent.click(screen.getByRole("option", { name: /Makoto/ }));
+    expect(store).toHaveValue(selected);
+  });
+
+  it("resets an automatically selected store when switching to a generic suggestion", () => {
+    const { input, store } = setup();
+    fireEvent.change(input, { target: { value: "ging" } });
+    fireEvent.click(screen.getByRole("option", { name: /Makoto/ }));
+    expect(store).toHaveValue("giant");
+    fireEvent.change(input, { target: { value: "milk" } });
+    fireEvent.click(screen.getByRole("option", { name: /Milk/ }));
+    expect(store).toHaveValue("");
+  });
+
+  it("falls back to Any Store when the saved store is unavailable", () => {
+    const { input, store } = setup([{ ...candidates[0], storeId: "disabled" }]);
+    fireEvent.change(input, { target: { value: "ging" } });
+    fireEvent.click(screen.getByRole("option", { name: /Makoto/ }));
+    expect(store).toHaveValue("");
+  });
+
   it("opens after one character and selecting a result fills canonical case and its store without submitting", () => {
     const { action, input, store } = setup();
     fireEvent.change(input, { target: { value: "DRESS" } });
@@ -120,5 +145,10 @@ describe("QuickAddCombobox", () => {
     await waitFor(() => expect(action).toHaveBeenCalledOnce());
     await waitFor(() => expect(input).toHaveValue(""));
     expect(store).toHaveValue("");
+
+    // A manual override belongs to one request, not every later request in this page.
+    fireEvent.change(input, { target: { value: "ging" } });
+    fireEvent.click(screen.getByRole("option", { name: /Makoto/ }));
+    expect(store).toHaveValue("giant");
   });
 });

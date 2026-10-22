@@ -22,6 +22,7 @@ export function QuickAddCombobox({
   const listboxId = useId();
   const [itemValue, setItemValue] = useState("");
   const [storeId, setStoreId] = useState("");
+  const [storeChosenManually, setStoreChosenManually] = useState(false);
   const [open, setOpen] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const indexedCandidates = useMemo(() => indexAutocompleteCandidates(candidates), [candidates]);
@@ -32,13 +33,16 @@ export function QuickAddCombobox({
     await action(formData);
     setItemValue("");
     setStoreId("");
+    setStoreChosenManually(false);
     setOpen(false);
     setActiveIndex(-1);
   }
 
   function selectCandidate(candidate: AutocompleteCandidate) {
     setItemValue(candidate.displayName);
-    if (candidate.storeId && stores.some((store) => store.id === candidate.storeId)) setStoreId(candidate.storeId);
+    if (!storeChosenManually) {
+      setStoreId(stores.some((store) => store.id === candidate.storeId) ? candidate.storeId! : "");
+    }
     setOpen(false);
     setActiveIndex(-1);
   }
@@ -121,7 +125,10 @@ export function QuickAddCombobox({
       </div>
       <label className="field">
         Store
-        <select name="storeId" value={storeId} onChange={(event) => setStoreId(event.currentTarget.value)}>
+        <select name="storeId" value={storeId} onChange={(event) => {
+          setStoreId(event.currentTarget.value);
+          setStoreChosenManually(true);
+        }}>
           <option value="">Any Store</option>
           {stores.map((store) => (
             <option key={store.id} value={store.id}>

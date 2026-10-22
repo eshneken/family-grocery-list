@@ -216,6 +216,7 @@ export async function updateListItemAction(formData: FormData) {
     displayName: parsed.displayName,
     category: parsed.category,
     storeId: formString(formData, "storeId") || null,
+    rememberStore: formData.has("storePreferencePresent") ? formData.get("rememberStore") === "on" : undefined,
     recurringStaple: formData.get("recurringStaple") === "on"
   });
   await refreshAll();

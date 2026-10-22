@@ -14,6 +14,67 @@ test.beforeEach(async ({ context }) => {
   ]);
 });
 
+test("generic autocomplete stays Any Store after a purchase at a specific store", async ({ page }) => {
+  await page.goto("/list");
+  const input = page.getByRole("combobox", { name: "Item", exact: true });
+  await input.fill("Oranges");
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(input).toHaveValue("");
+  await page.goto("/shop");
+  await page.getByRole("button", { name: "Start shopping" }).click();
+  await page.getByRole("button", { name: "Mark Oranges purchased", exact: true }).click();
+  await expect(page.locator(".summary-card").filter({ hasText: "Purchased" })).toContainText("1");
+  await page.getByRole("button", { name: "Complete shopping run" }).click();
+  await expect(page.getByRole("heading", { name: "Choose a store" })).toBeVisible();
+  await page.goto("/list");
+  await input.fill("ora");
+  const option = page.getByRole("option", { name: /Oranges/ });
+  await expect(option).toContainText("Any Store");
+  await option.click();
+  await expect(page.getByRole("combobox", { name: "Store", exact: true })).toHaveValue("");
+});
+
+test("request editor remembers and clears a future store without changing the request destination", async ({ page }) => {
+  await page.goto("/list");
+  const input = page.getByRole("combobox", { name: "Item", exact: true });
+  await input.fill("Oranges");
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(input).toHaveValue("");
+  await page.getByLabel("Edit Oranges", { exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Edit request" });
+  const remember = dialog.getByLabel("Remember this store for future requests");
+  await expect(remember).not.toBeChecked();
+  await dialog.getByRole("combobox", { name: "Store", exact: true }).selectOption({ label: "Whole Foods" });
+  await remember.check();
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog).toBeHidden();
+  await page.getByLabel("Edit Oranges", { exact: true }).click();
+  await expect(remember).toBeChecked();
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+
+  await page.goto("/shop");
+  await page.getByLabel("Whole Foods", { exact: true }).check();
+  await page.getByRole("button", { name: "Start shopping" }).click();
+  await page.getByRole("button", { name: "Mark Oranges purchased", exact: true }).click();
+  await expect(page.locator(".summary-card").filter({ hasText: "Purchased" })).toContainText("1");
+  await page.getByRole("button", { name: "Complete shopping run" }).click();
+  await expect(page.getByRole("heading", { name: "Choose a store" })).toBeVisible();
+  await page.goto("/list");
+  await input.fill("ora");
+  await expect(page.getByRole("option", { name: /Oranges/ })).toContainText("Whole Foods");
+  await page.getByRole("option", { name: /Oranges/ }).click();
+  await expect(page.getByRole("combobox", { name: "Store", exact: true })).not.toHaveValue("");
+  await page.getByRole("button", { name: "Add item" }).click();
+  await expect(input).toHaveValue("");
+  await page.getByLabel("Edit Oranges", { exact: true }).click();
+  await remember.uncheck();
+  await dialog.getByRole("button", { name: "Save changes" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.locator("article").filter({ hasText: "Oranges" })).toContainText("Whole Foods");
+  await page.getByLabel("Edit Oranges", { exact: true }).click();
+  await expect(remember).not.toBeChecked();
+});
+
 test("automatic completion preserves purchases, moves unfinished items, and permits a new run", async ({ page }) => {
   await page.goto("/list");
   await page.getByRole("combobox", { name: "Item", exact: true }).fill("Milk");
@@ -105,7 +166,7 @@ test("requestor edits an item in the compact editor dialog", async ({ page }) =>
   const dialog = page.getByRole("dialog", { name: "Edit request" });
   await dialog.getByLabel("Item name").fill("Cherry tomatoes");
   await dialog.getByLabel("Category").selectOption("Produce");
-  await dialog.getByLabel("Store").selectOption({ label: "Whole Foods" });
+  await dialog.getByRole("combobox", { name: "Store", exact: true }).selectOption({ label: "Whole Foods" });
   await dialog.getByLabel("Recurring item").check();
   await dialog.getByRole("button", { name: "Save changes" }).click();
 

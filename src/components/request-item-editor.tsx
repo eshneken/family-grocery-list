@@ -12,11 +12,15 @@ type RequestItemEditorProps = {
   storeId: string | null;
   stores: Array<{ id: string; name: string }>;
   recurringStaple: boolean;
+  savedStoreId: string | null;
 };
 
 /** Compact modal for correcting a pending request's name, category, store, and recurring setting. */
-export function RequestItemEditor({ id, displayName, category, storeId, stores, recurringStaple }: RequestItemEditorProps) {
+export function RequestItemEditor({ id, displayName, category, storeId, stores, recurringStaple, savedStoreId }: RequestItemEditorProps) {
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const [selectedStore, setSelectedStore] = useState(storeId ?? "");
+  const [rememberStore, setRememberStore] = useState(Boolean(savedStoreId && savedStoreId === storeId));
+  const [preferenceChanged, setPreferenceChanged] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -28,7 +32,13 @@ export function RequestItemEditor({ id, displayName, category, storeId, stores, 
 
   return (
     <>
-      <button className="icon-action" type="button" aria-label={`Edit ${displayName}`} onClick={() => dialogRef.current?.showModal()}>
+      <button className="icon-action" type="button" aria-label={`Edit ${displayName}`} onClick={() => {
+        dialogRef.current?.querySelector("form")?.reset();
+        setSelectedStore(storeId ?? "");
+        setRememberStore(Boolean(savedStoreId && savedStoreId === storeId));
+        setPreferenceChanged(false);
+        dialogRef.current?.showModal();
+      }}>
         <Pencil size={18} aria-hidden="true" />
       </button>
       <dialog ref={dialogRef} className="request-editor-dialog" aria-labelledby={`edit-item-${id}`} onClick={(event) => event.currentTarget === event.target && closeDialog()}>
@@ -49,6 +59,7 @@ export function RequestItemEditor({ id, displayName, category, storeId, stores, 
           }}
         >
           <input type="hidden" name="itemId" value={id} />
+          {preferenceChanged ? <input type="hidden" name="storePreferencePresent" value="true" /> : null}
           <div className="dialog-heading">
             <h2 id={`edit-item-${id}`}>Edit request</h2>
             <button className="text-button" type="button" onClick={closeDialog}>
@@ -71,7 +82,12 @@ export function RequestItemEditor({ id, displayName, category, storeId, stores, 
           </label>
           <label className="field">
             Store
-            <select name="storeId" defaultValue={storeId ?? ""}>
+            <select name="storeId" value={selectedStore} onChange={(event) => {
+              const value = event.currentTarget.value;
+              setSelectedStore(value);
+              setRememberStore(Boolean(savedStoreId && savedStoreId === value));
+              setPreferenceChanged(false);
+            }}>
               <option value="">Any Store</option>
               {stores.map((store) => (
                 <option key={store.id} value={store.id}>
@@ -80,6 +96,23 @@ export function RequestItemEditor({ id, displayName, category, storeId, stores, 
               ))}
             </select>
           </label>
+          <label className="checkbox-row">
+            <input name="rememberStore" type="checkbox" checked={rememberStore} onChange={(event) => {
+              setRememberStore(event.currentTarget.checked);
+              setPreferenceChanged(true);
+            }} />
+            Remember this store for future requests
+          </label>
+          <small>Store changes affect this request only. Check to save a future default; uncheck a saved preference to clear it.</small>
+          {savedStoreId && savedStoreId !== selectedStore && !preferenceChanged ? (
+            <small>
+              Saved future store: {stores.find((store) => store.id === savedStoreId)?.name ?? "Unavailable store"}.{" "}
+              <button type="button" className="text-button" onClick={() => {
+                setRememberStore(false);
+                setPreferenceChanged(true);
+              }}>Clear saved preference</button>
+            </small>
+          ) : null}
           <label className="checkbox-row">
             <input name="recurringStaple" type="checkbox" defaultChecked={recurringStaple} />
             Recurring item
