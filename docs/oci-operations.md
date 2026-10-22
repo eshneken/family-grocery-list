@@ -55,7 +55,17 @@ command -v oci
 
 In that file's `users[].user.exec`, set `command` to the absolute path reported by `command -v oci`, and verify the arguments include `--profile "${OCI_CLI_PROFILE}"`, `--region us-ashburn-1`, and `--auth api_key`. Inspect only the exec settings; do not dump kubeconfigs containing credentials into logs. Verify a fresh pod list before importing the file into Lens. If updating an existing operator file, preserve its distinct context name and avoid creating duplicate contexts.
 
-Use a separate MFA/security-token human profile when configured; its exec authentication must match that profile. Keep kubeconfig private and keep contexts distinct. The default API source rule allows IPv4 TCP 6443; configure `operator_api_cidrs` for your access requirements. TLS, IAM and RBAC remain required. Database, worker and kubelet ports are private.
+Use a separate MFA/security-token human profile when configured; its exec authentication must match that profile. Keep kubeconfig private and keep contexts distinct. API ingress on TCP 6443 is restricted to `OCI_ADMIN_CIDRS`. TLS, IAM and RBAC remain required. Database, worker, SSH and kubelet ports are private.
+
+## Administrative network access
+
+In GitHub, open **Settings → Environments → always-free → Environment variables** and edit **`OCI_ADMIN_CIDRS`**. Its value is a JSON array, for example `["203.0.113.14/32", "198.51.100.0/24"]`. Use `/32` for one home IP and retain approved VPN ranges. No deployed addresses are hardcoded in Terraform or workflows. The same setting is required on initial production builds.
+
+After an IP change, run **OCI Always Free infrastructure** on `master`, with **stage `network-access`** and **operation `plan`**. Review the rule changes, then run **operation `apply`** with the full reviewed commit SHA. Editing the variable alone does not change OCI. The restricted plan uses production state but targets only administrative API rules and the allowlist of an already enabled Bastion. Its guard rejects VM, cluster, storage, application, and unrelated network changes. Removing an obsolete administrative rule is permitted; replacements and deletion of other infrastructure remain rejected. No image build, VM recreation or application rollout is required. This works even when your new IP cannot reach Kubernetes because it uses the OCI management API.
+
+Public ports 80 (HTTPS redirects) and 443 remain available. The worker has no public IP or internet SSH rule. Bastion remains disabled unless separately enabled; these CIDRs configure its client policy without opening a new SSH service or enabling direct worker SSH.
+
+GitHub-hosted runners use changing egress addresses. Authenticated jobs that need Kubernetes therefore create one temporary runner `/32` rule for TCP 6443, bound to the approved cluster's API NSG. The action's post-job hook removes that exact rule on success or failure, including an unknown add outcome. It never adds SSH access or modifies the permanent CIDRs. All maintenance workflows share one concurrency group. If GitHub forcibly terminates a runner before cleanup can execute, its OCI rule has no native expiry: the next Kubernetes maintenance job removes same-repository orphan rules older than two hours. The hourly enabled backup monitor normally performs that recovery. For immediate recovery, inspect the approved API NSG and remove only the orphan rule marked `github-actions-api:OWNER/REPOSITORY:`; never remove active jobs' rules or internal cluster rules.
 
 ## Routine health checks
 

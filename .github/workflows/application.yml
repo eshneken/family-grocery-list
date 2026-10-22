@@ -123,6 +123,7 @@ jobs:
           service-user-ocid: ${{ env.OCI_WIF_SERVICE_USER_OCID }}
           tenancy-ocid: ${{ env.OCI_TENANCY_OCID }}
           region: ${{ env.OCI_REGION }}
+      - uses: ./.github/actions/oke-api-access
       - name: Create WIF-aware OKE kubeconfig
         shell: bash
         run: |

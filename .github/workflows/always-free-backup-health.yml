@@ -42,6 +42,8 @@ jobs:
           service-user-ocid: ${{ env.OCI_WIF_SERVICE_USER_OCID }}
           tenancy-ocid: ${{ env.OCI_TENANCY_OCID }}
           region: ${{ env.OCI_REGION }}
+      - uses: ./.github/actions/oke-api-access
+        if: steps.gate.outputs.enabled == 'true'
       - name: Create target kubeconfig
         if: steps.gate.outputs.enabled == 'true'
         run: |

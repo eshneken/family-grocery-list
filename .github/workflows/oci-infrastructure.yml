@@ -6,7 +6,7 @@ on:
         description: Review/apply one stage. Local administrator bootstrap must already be complete.
         required: true
         type: choice
-        options: [production, cluster-foundation]
+        options: [production, network-access, cluster-foundation]
       operation:
         description: Plan first; apply only after reviewing this commit's plan.
         required: true
@@ -32,6 +32,7 @@ jobs:
     environment: always-free
     timeout-minutes: 120
     env:
+      OCI_ADMIN_CIDRS: ${{ vars.OCI_ADMIN_CIDRS }}
       TF_VAR_oke_kubernetes_version: ${{ vars.OCI_OKE_KUBERNETES_VERSION }}
       TF_VAR_backup_image: ${{ vars.OCI_BACKUP_IMAGE }}
       TF_VAR_backups_enabled: ${{ vars.OCI_BACKUPS_ENABLED || 'false' }}
@@ -73,6 +74,8 @@ jobs:
                   print('::add-mask::' + value)
                   env.write('TF_VAR_' + name + '=' + value + '\n')
           PY
+      - uses: ./.github/actions/oke-api-access
+        if: inputs.stage == 'cluster-foundation'
       - name: Create foundation kubeconfig
         if: inputs.stage == 'cluster-foundation'
         shell: bash
