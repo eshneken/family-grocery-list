@@ -6,7 +6,7 @@ These Terraform roots provision one configured deployment in a free-tier eligibl
 |---|---|---|
 | `tenancy-identity` | Backup tag, worker dynamic group and bucket-scoped IAM; local administrator only | `tenancy-identity/terraform.tfstate` |
 | `bootstrap` | Private versioned state bucket, private backup bucket, DEFAULT Vault and SOFTWARE key | `bootstrap/terraform.tfstate` |
-| `production` | Basic OKE, one A1 2/12 worker, 50 GB boot, private networking, public API, reserved LB IP, optional Bastion and database secrets/TLS | `production/terraform.tfstate` |
+| `production` | Basic OKE, one A1 2/12 worker, 50 GB boot, private networking, public API, reserved LB IP, persistent free OCI Bastion and database secrets/TLS | `production/terraform.tfstate` |
 | `cluster-foundation` | PostgreSQL 16, Caddy, one retained shared 50 GiB PVC, one 10/10 Mbps flexible LB and daily backup CronJob | `cluster-foundation/terraform.tfstate` |
 
 Identity and bootstrap start with private local state before the state bucket exists. The helper moves that state to separate keys in the private bucket. Preserve existing state on updates; do not initialize a second state for resources that already exist.

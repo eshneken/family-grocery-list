@@ -1,6 +1,6 @@
 # OCI platform
 
-Creates Basic OKE with one managed ARM64 A1 worker (2 OCPUs / 12 GB, 50 GB boot), private worker/pod subnets, NAT/Service Gateway, public API/LB subnets, NSGs, reserved LB address, optional Bastion and Vault-backed PostgreSQL credentials/private TLS. Bastion is disabled by default. PostgreSQL runs in Kubernetes.
+Creates Basic OKE with one managed ARM64 A1 worker (2 OCPUs / 12 GB, 50 GB boot), private worker/pod subnets, NAT/Service Gateway, public API/LB subnets, NSGs, reserved LB address, persistent free OCI Bastion and Vault-backed PostgreSQL credentials/private TLS. Bastion is enabled by default, uses the administrative CIDRs, and caps each session at one hour. Reuse it and create SSH sessions on demand. PostgreSQL runs in Kubernetes.
 
 Select the supported Kubernetes version and matching ARM64 image from regional OKE options and pin them in private configuration. IMDSv1 is disabled at launch. The backup defined tag applies to the actual worker; confirm its shape, instance options, tag and boot volume after creation.
 
@@ -8,7 +8,7 @@ Set required `admin_cidrs` through the private `OCI_ADMIN_CIDRS` GitHub environm
 
 Copy the safe example into an ignored variables file and use the isolated helper. Review every plan before applying. See [setup](../../docs/oci-setup.md) and [operations](../../docs/oci-operations.md).
 
-The dedicated Bastion subnet has stateful egress to the private worker subnet on TCP 22, paired with worker NSG ingress from the Bastion subnet CIDR on TCP 22. This prepares the SSH path before Bastion is enabled; reserve that subnet for trusted Bastion endpoints. Client CIDR authorization, a time-limited session, and worker SSH authentication remain required. The other subnets retain their empty shared security list and NSG-managed rules.
+The dedicated Bastion subnet has stateful egress to the private worker subnet on TCP 22, paired with worker NSG ingress from the Bastion subnet CIDR on TCP 22. Terraform creates the managed Bastion with this SSH path; reserve that subnet for trusted Bastion endpoints. Client CIDR authorization, a time-limited session, and worker SSH authentication remain required. The other subnets retain their empty shared security list and NSG-managed rules.
 
 ## External DNS setup
 

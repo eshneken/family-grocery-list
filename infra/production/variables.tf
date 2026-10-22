@@ -156,6 +156,7 @@ variable "admin_cidrs" {
 }
 
 variable "enable_bastion" {
-  type    = bool
-  default = false
+  description = "Keep the free OCI Bastion service available; operators create short-lived SSH sessions on demand."
+  type        = bool
+  default     = true
 }

@@ -66,6 +66,31 @@ class NetworkAccessTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             guard.check(plan, target=TARGET, network_access_only=True)
 
+    def test_bastion_create_and_cidr_update_keep_restricted_access(self):
+        after = {'bastion_type': 'STANDARD', 'max_session_ttl_in_seconds': 3600,
+                 'client_cidr_block_allow_list': ['203.0.113.14/32']}
+        change = {'actions': ['create'], 'after': after}
+        plan = {'variables': {'admin_cidrs': {'value': ['203.0.113.14/32']}},
+                'resource_changes': [{'mode': 'managed', 'type': 'oci_bastion_bastion',
+                 'address': 'oci_bastion_bastion.grocery[0]', 'change': change}]}
+        guard.check(plan, target=TARGET)
+        with self.assertRaisesRegex(ValueError, 'unrelated'):
+            guard.check(plan, target=TARGET, network_access_only=True)
+        change['actions'] = ['update']
+        guard.check(plan, target=TARGET, network_access_only=True)
+        for cidrs in [[], ['0.0.0.0/0'], ['198.51.100.0/24']]:
+            after['client_cidr_block_allow_list'] = cidrs
+            with self.subTest(cidrs=cidrs), self.assertRaises(ValueError):
+                guard.check(plan, target=TARGET, network_access_only=True)
+        after['client_cidr_block_allow_list'] = ['203.0.113.14/32']
+        after['max_session_ttl_in_seconds'] = 10800
+        with self.assertRaisesRegex(ValueError, 'one hour'):
+            guard.check(plan, target=TARGET)
+        after['max_session_ttl_in_seconds'] = 3600
+        change['actions'] = ['delete', 'create']
+        with self.assertRaisesRegex(ValueError, 'Deletion/replacement'):
+            guard.check(plan, target=TARGET)
+
     def test_cleanup_cannot_remove_admin_or_other_job_rules(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / 'lease.json'
