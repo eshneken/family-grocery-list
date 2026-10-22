@@ -20,7 +20,7 @@ jobs:
   verify:
     if: github.ref == 'refs/heads/master'
     name: Exchange GitHub OIDC token for OCI credentials
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: always-free
     timeout-minutes: 10
     steps:

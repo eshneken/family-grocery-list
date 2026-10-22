@@ -16,7 +16,7 @@ concurrency:
 jobs:
   unit:
     name: Unit tests and coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     services:
       postgres:
@@ -84,7 +84,7 @@ jobs:
 
   e2e:
     name: Browser E2E tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
       postgres:
@@ -133,7 +133,7 @@ jobs:
 
   platform-integration:
     name: Always Free PostgreSQL integration
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
