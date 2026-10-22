@@ -1,9 +1,11 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-bookworm-slim AS base
+FROM node:22.23.4-bookworm-slim AS base
 RUN apt-get update \
   && apt-get install --yes --no-install-recommends ca-certificates openssl \
   && rm -rf /var/lib/apt/lists/*
+# Node uses its own CA bundle by default; verify it as well as Debian's store.
+RUN node -e 'const {X509Certificate}=require("node:crypto"), fs=require("node:fs"); const bundles=[require("node:tls").rootCertificates,fs.readFileSync("/etc/ssl/certs/ca-certificates.crt","utf8").match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g)]; for(const certs of bundles) { if(!certs?.length) throw Error("Empty CA bundle"); for(const cert of certs) if(new X509Certificate(cert).fingerprint256.replaceAll(":","").toLowerCase()==="86a1ecba089c4a8d3bbe2734c612ba341d813e043cf9e8a862cd5c57a36bbe6b") throw Error("Compromised emSign G3 root is still trusted"); }'
 
 FROM base AS dependencies
 WORKDIR /app
