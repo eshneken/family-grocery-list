@@ -84,6 +84,38 @@ After reviewing a plan, set `CONFIRM_APPLY_SHA` to the full reviewed commit and 
 
 Preserve `OCI_BACKUPS_ENABLED=true` in `always-free` and the corresponding `backups_enabled=true` local input. Foundation's source default is false for a new installation; omitting the live setting would pause production backups. Verify the plan leaves schedules enabled. Do not replace/destroy the retained shared PVC or remove its lifecycle guard to make a plan pass.
 
+## Certificate and host patch maintenance
+
+Patch the approved worker with `sudo dnf update -y`, retain the transaction log,
+and verify `ca-certificates`, OpenSSL, Python and `dnf needs-restarting -r`
+afterward. A new kernel requires a separately scheduled reboot of this single
+worker. Verify node readiness, public application readiness and backup health
+after maintenance. Preserve IMDSv1 being disabled.
+
+Host updates do not refresh existing container images, Node's built-in roots or
+pip's vendored CA bundle. For the October 2026 eMudhra incident, use Node
+22.23.4 or later on the 22.x line, pip 26.2.2 and certifi 2026.10.19 or later
+where the Python version supports them. Inventory separate virtual environments,
+including Node Doctor; do not replace Oracle Linux's system Python with an
+upstream interpreter. An older package version may contain a distribution
+backport, so inspect its effective CA bundle as well as its version.
+
+Rebuild the application and backup images with fresh base images and package
+layers. The image builds reject the affected G3 root by fingerprint. Release
+the application image normally; update the backup digest and Caddy image through
+a reviewed foundation plan. Keep backups enabled. CI's isolated OCI CLI
+environment temporarily overrides Oracle's restrictive certifi upper bound
+with the patched CA-data package; remove that exception once Oracle supports it.
+
+The Node security update retains Next.js 15 and Prisma 6, with Next.js 15.5.28
+and next-auth 4.24.15. Package overrides refresh PostCSS and Sharp, replace
+Prisma's pinned deepmerge-ts with 8.0.2, and replace only the Next ESLint
+plugin's fast-glob dependency with tinyglobby 0.2.17 to remove its unpatched
+braces dependency. Compatibility tests exercise Next's actual directory
+discovery; Prisma generation, migrations and application tests cover the other
+overrides. Revisit these overrides when upstream dependency ranges include the
+fixes. CI rejects high and critical npm advisories before the application tests.
+
 ## Worker capacity and replacement
 
 The worker configuration is `VM.Standard.A1.Flex`, 2 OCPUs / 12 GB RAM, 50 GB boot disk and ARM64. The availability domain, supported Kubernetes version and matching ARM image are selected privately during setup. IMDSv1 must be disabled and the instance must have `grocery-backup.eligible=true`. Verify these properties after provisioning or replacement. Never substitute a paid shape or enable legacy metadata endpoints.

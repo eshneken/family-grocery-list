@@ -72,7 +72,7 @@ variable "app_hostname" {
 variable "caddy_image" {
   description = "Pinned multi-architecture official Caddy image."
   type        = string
-  default     = "docker.io/library/caddy@sha256:4c6e91c6ed0e2fa03efd5b44747b625fec79bc9cd06ac5235a779726618e530d"
+  default     = "docker.io/library/caddy@sha256:3095ad245c353e3bdb27a38f22a095c1cfa9e295ab21c0214c3e72b0e2960525"
 }
 
 variable "caddy_acme_email" {

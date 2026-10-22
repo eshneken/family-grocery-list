@@ -28,7 +28,7 @@ concurrency:
 jobs:
   infrastructure:
     if: github.ref == 'refs/heads/master'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: always-free
     timeout-minutes: 120
     env:
