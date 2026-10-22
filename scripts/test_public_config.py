@@ -26,7 +26,7 @@ class PublicConfiguration(unittest.TestCase):
                    'githubusercontent.com', 'google.com', 'googleusercontent.com',
                    'oracle.com', 'oraclecloud.com', 'kubernetes.io', 'k8s.io',
                    'terraform.io', 'docker.io', 'ghcr.io', 'postgresql.org',
-                   'prisma.io', 'w3.org', 'nextjs.org', 'dicebear.com', 'pythonhosted.org')
+                   'prisma.io', 'w3.org', 'nextjs.org', 'dicebear.com', 'pythonhosted.org', 'ipify.org')
         failures = []
         for path in public_files():
             relative = path.relative_to(ROOT)

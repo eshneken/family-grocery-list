@@ -50,6 +50,8 @@ jobs:
             echo 'Approved private target identity verified.'
             echo 'GitHub token exchange and namespace discovery passed. No infrastructure was provisioned.'
           } >> "$GITHUB_STEP_SUMMARY"
+      - uses: ./.github/actions/oke-api-access
+        if: inputs.check_backup_health
       - name: Verify backup health
         if: inputs.check_backup_health
         shell: bash

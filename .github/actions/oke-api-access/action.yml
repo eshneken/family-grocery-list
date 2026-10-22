@@ -1,0 +1,7 @@
+name: Temporary OKE runner access
+description: Open TCP 6443 for this runner only and remove it in the post-job action.
+runs:
+  using: node24
+  main: main.mjs
+  post: post.mjs
+  post-if: always()

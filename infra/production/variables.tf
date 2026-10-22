@@ -84,17 +84,6 @@ variable "node_ssh_public_key" {
   nullable = true
 }
 
-variable "bastion_client_cidr" {
-  default     = "127.0.0.1/32"
-  description = "Client CIDR allowed to create Bastion sessions, for example 203.0.113.0/24."
-  type        = string
-
-  validation {
-    condition     = can(cidrhost(var.bastion_client_cidr, 0))
-    error_message = "bastion_client_cidr must be a valid IPv4 or IPv6 CIDR."
-  }
-}
-
 variable "vault_id" {
   description = "Vault ID created by bootstrap for database secrets."
   type        = string
@@ -157,13 +146,12 @@ variable "node_image_id" {
   description = "Reviewed OKE ARM64 image matching the selected Kubernetes version."
   type        = string
 }
-variable "operator_api_cidrs" {
-  description = "API source CIDRs; select operator and CI access requirements explicitly."
+variable "admin_cidrs" {
+  description = "Explicit IPv4 administrative allowlist for the OKE API and enabled Bastion. Supplied by OCI_ADMIN_CIDRS in GitHub; never default to public access."
   type        = set(string)
-  default     = ["0.0.0.0/0"]
   validation {
-    condition     = length(var.operator_api_cidrs) > 0 && alltrue([for cidr in var.operator_api_cidrs : can(cidrhost(cidr, 0))])
-    error_message = "Supply valid API source CIDRs."
+    condition     = length(var.admin_cidrs) > 0 && alltrue([for cidr in var.admin_cidrs : can(cidrnetmask(cidr)) && try(tonumber(split("/", cidr)[1]) > 0, false)])
+    error_message = "Supply a nonempty IPv4 administrative CIDR allowlist; /0 is forbidden."
   }
 }
 

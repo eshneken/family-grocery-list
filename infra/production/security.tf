@@ -119,7 +119,7 @@ resource "oci_core_network_security_group_security_rule" "lb_health_to_workers" 
 }
 
 resource "oci_core_network_security_group_security_rule" "api_public_ingress" {
-  for_each                  = var.operator_api_cidrs
+  for_each                  = var.admin_cidrs
   network_security_group_id = oci_core_network_security_group.oke_api.id
   direction                 = "INGRESS"
   protocol                  = "6"

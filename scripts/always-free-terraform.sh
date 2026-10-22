@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 # Isolated target-bound working copies: never consume unreviewed root-local tfvars/state.
 set -euo pipefail
-stage="${1:?stage: tenancy-identity, bootstrap, production or cluster-foundation}"
+stage="${1:?stage: tenancy-identity, bootstrap, production, network-access or cluster-foundation}"
 operation="${2:-plan}"
+if [[ "$stage" == network-access ]]; then
+  stage=production
+  export ALWAYS_FREE_NETWORK_ACCESS_ONLY=true
+fi
 case "$stage" in tenancy-identity|bootstrap|production|cluster-foundation) ;; *) exit 2 ;; esac
 case "$operation" in plan|apply) ;; *) exit 2 ;; esac
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
@@ -67,6 +71,13 @@ terraform -chdir="$work_dir" init "${backend_args[@]}"
 if grep -q 'backend "oci"' "$work_dir/backend.tf"; then touch "$work_dir/remote-backend-ready"; fi
 vars_args=(-input=false)
 if [[ -n "${ALWAYS_FREE_VARS_FILE:-}" ]]; then vars_args=(-input=false -var-file="$ALWAYS_FREE_VARS_FILE"); fi
+if [[ "$stage" == production && -n "${OCI_ADMIN_CIDRS:-}" ]]; then
+  export TF_VAR_admin_cidrs="$(python3 "$repo_dir/scripts/oci_admin_cidrs.py")"
+fi
+if [[ "${ALWAYS_FREE_NETWORK_ACCESS_ONLY:-false}" == true ]]; then
+  [[ "$stage" == production ]] || { echo 'Network access updates require production state.' >&2; exit 1; }
+  vars_args+=(-target=oci_core_network_security_group_security_rule.api_public_ingress -target=oci_bastion_bastion.grocery)
+fi
 terraform -chdir="$work_dir" plan "${vars_args[@]}" -out=reviewed.tfplan
 terraform -chdir="$work_dir" show -json reviewed.tfplan | python3 "$repo_dir/scripts/check-always-free-plan.py"
 if [[ "$operation" == apply ]]; then

@@ -4,6 +4,7 @@ import os
 import sys
 
 from oci_target import load_target
+from oci_admin_cidrs import parse as parse_admin_cidrs
 ALLOWED_OCI = {
     'oci_kms_vault', 'oci_kms_key', 'oci_objectstorage_bucket', 'oci_vault_secret',
     'oci_containerengine_cluster', 'oci_containerengine_node_pool', 'oci_bastion_bastion',
@@ -15,7 +16,7 @@ ALLOWED_OCI = {
 }
 
 
-def check(plan, nodepool_retry_only=False, target=None):
+def check(plan, nodepool_retry_only=False, target=None, network_access_only=False):
     target = target or load_target(allow_unprovisioned_cluster=True)
     for key in ("tenancy_ocid", "compartment_ocid", "region"):
         if key in plan.get("variables", {}) and plan["variables"][key]["value"] != target[key]:
@@ -27,11 +28,25 @@ def check(plan, nodepool_retry_only=False, target=None):
         typ = resource['type']
         change = resource['change']
         after = change.get('after') or {}
+        api_rule = (typ == 'oci_core_network_security_group_security_rule'
+                    and resource['address'].startswith('oci_core_network_security_group_security_rule.api_public_ingress['))
+        bastion = typ == 'oci_bastion_bastion' and resource['address'] == 'oci_bastion_bastion.grocery[0]'
+        if network_access_only and change['actions'] != ['no-op']:
+            if not (api_rule or (bastion and change['actions'] == ['update'])):
+                raise ValueError('Network access update forbids unrelated resource changes: ' + resource['address'])
+        if api_rule and after:
+            allowed = parse_admin_cidrs(json.dumps(plan.get('variables', {}).get('admin_cidrs', {}).get('value')))
+            ports = after.get('tcp_options', [{}])[0].get('destination_port_range', [{}])[0]
+            if (after.get('direction'), after.get('protocol'), after.get('source_type'),
+                ports.get('min'), ports.get('max')) != ('INGRESS', '6', 'CIDR_BLOCK', 6443, 6443) or after.get('source') not in allowed:
+                raise ValueError('API ingress must match the reviewed administrative CIDRs on TCP 6443')
         if nodepool_retry_only and change['actions'] != ['no-op']:
             if not (resource['address'] == 'oci_containerengine_node_pool.grocery'
                     and typ == 'oci_containerengine_node_pool' and change['actions'] == ['create']):
                 raise ValueError('Node-pool retry forbids other resource changes: ' + resource['address'])
-        if 'delete' in change['actions']:
+        # Removing an obsolete API CIDR rule is necessary when an operator IP changes.
+        # This exception cannot replace/delete the NSG, Bastion, VM or any other resource.
+        if 'delete' in change['actions'] and not (api_rule and change['actions'] == ['delete']):
             raise ValueError('Deletion/replacement requires separate reviewed maintenance: ' + resource['address'])
         if typ.startswith('oci_') and typ not in ALLOWED_OCI:
             raise ValueError('Unapproved OCI resource type: ' + typ)
@@ -69,7 +84,8 @@ def check(plan, nodepool_retry_only=False, target=None):
 
 if __name__ == '__main__':
     try:
-        changes = check(json.load(sys.stdin), nodepool_retry_only=os.environ.get('ALWAYS_FREE_NODEPOOL_RETRY_ONLY') == 'true')
+        changes = check(json.load(sys.stdin), nodepool_retry_only=os.environ.get('ALWAYS_FREE_NODEPOOL_RETRY_ONLY') == 'true',
+                        network_access_only=os.environ.get('ALWAYS_FREE_NETWORK_ACCESS_ONLY') == 'true')
         print('Always Free plan guard passed. Proposed resource changes:')
         print('\n'.join(changes) or '(none)')
     except (ValueError, KeyError, TypeError) as error:
