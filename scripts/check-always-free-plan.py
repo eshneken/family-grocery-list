@@ -34,6 +34,13 @@ def check(plan, nodepool_retry_only=False, target=None, network_access_only=Fals
         if network_access_only and change['actions'] != ['no-op']:
             if not (api_rule or (bastion and change['actions'] == ['update'])):
                 raise ValueError('Network access update forbids unrelated resource changes: ' + resource['address'])
+        if bastion and after:
+            allowed = parse_admin_cidrs(json.dumps(plan.get('variables', {}).get('admin_cidrs', {}).get('value')))
+            actual = parse_admin_cidrs(json.dumps(after.get('client_cidr_block_allow_list')))
+            if set(actual) != set(allowed):
+                raise ValueError('Bastion client allowlist must match the reviewed administrative CIDRs')
+            if after.get('bastion_type') != 'STANDARD' or after.get('max_session_ttl_in_seconds') != 3600:
+                raise ValueError('Bastion must be STANDARD with a maximum session TTL of one hour')
         if api_rule and after:
             allowed = parse_admin_cidrs(json.dumps(plan.get('variables', {}).get('admin_cidrs', {}).get('value')))
             ports = after.get('tcp_options', [{}])[0].get('destination_port_range', [{}])[0]

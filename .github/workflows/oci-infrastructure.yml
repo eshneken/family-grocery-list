@@ -33,6 +33,7 @@ jobs:
     timeout-minutes: 120
     env:
       OCI_ADMIN_CIDRS: ${{ vars.OCI_ADMIN_CIDRS }}
+      TF_VAR_enable_bastion: 'true'
       TF_VAR_oke_kubernetes_version: ${{ vars.OCI_OKE_KUBERNETES_VERSION }}
       TF_VAR_backup_image: ${{ vars.OCI_BACKUP_IMAGE }}
       TF_VAR_backups_enabled: ${{ vars.OCI_BACKUPS_ENABLED || 'false' }}
